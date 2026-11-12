@@ -1,1 +1,152 @@
-
+{
+  "status": "success",
+  "found": true,
+  "equipment_type": "衝壓剪切機械",
+  "user_credentials": [
+    "專任操作人員",
+    "每日作業前檢點"
+  ],
+  "query": "衝壓機操作人員資格與每日作業前安全檢點規定",
+  "similarity_score": 0.4025,
+  "jaccard_score": 0.4025,
+  "threshold": 0.2,
+  "answer_text": "依據《職業安全衛生設施規則第 43 條 - 衝壓剪切機械操作資格》規定：依據《職業安全衛生設施規則第 43 條》：雇主對於衝壓剪切機械，應指派安全測驗合格之專任操作人員，每日作業前執行安全檢點，並落實定期保養紀錄與防呆驗證。 必要資格包括：[專任操作人員, 安全檢驗合格, 每日作業前檢點, 安全防護具配戴]。（Jaccard 資格匹配指數為 0.40）。",
+  "source_title": "職業安全衛生設施規則第 43 條 - 衝壓剪切機械操作資格",
+  "source_url": "/docs/OSH-Reg-43.pdf",
+  "search_results": [
+    {
+      "regulation_id": "OSH-Reg-43",
+      "title": "職業安全衛生設施規則第 43 條 - 衝壓剪切機械操作資格",
+      "machine_category": "衝壓剪切機械",
+      "required_qualifications": [
+        "專任操作人員",
+        "安全檢驗合格",
+        "每日作業前檢點",
+        "安全防護具配戴"
+      ],
+      "summary": "依據《職業安全衛生設施規則第 43 條》：雇主對於衝壓剪切機械，應指派安全測驗合格之專任操作人員，每日作業前執行安全檢點，並落實定期保養紀錄與防呆驗證。",
+      "source_url": "/docs/OSH-Reg-43.pdf",
+      "raw_jaccard": 0.2525,
+      "jaccard_score": 0.4025
+    },
+    {
+      "regulation_id": "LIFT-REG-08",
+      "title": "升降機具與起重設備操作資格與年度代檢辦法",
+      "machine_category": "升降機具",
+      "required_qualifications": [
+        "吊掛作業人員證照",
+        "起重機操作執照",
+        "年度安全代檢合格",
+        "限制載重標示"
+      ],
+      "summary": "依據《升降機具安全檢查規則》：使用固定式或移動式起重機具者，操作人員必須領有國家考試合格證照，設備每年需通過定期檢查許可證展延。",
+      "source_url": "/docs/LIFT-REG-08.pdf",
+      "raw_jaccard": 0.0744,
+      "jaccard_score": 0.0744
+    },
+    {
+      "regulation_id": "CNS-1234",
+      "title": "CNS 1234 手持式電動工具檢驗與操作資格指引",
+      "machine_category": "電動工具",
+      "required_qualifications": [
+        "商品檢驗合格標籤",
+        "絕緣阻抗大於5M歐姆",
+        "防觸電保護裝置",
+        "操作安全培訓"
+      ],
+      "summary": "依據《CNS 1234 電動工具安規指引》：手持電動工具須貼有 R 字頭商品檢驗標籤，操作人員需接受基本電氣安全培訓，並隨時量測絕緣阻抗與洩漏電流。",
+      "source_url": "/docs/CNS-1234.pdf",
+      "raw_jaccard": 0.0382,
+      "jaccard_score": 0.0382
+    }
+  ],
+  "matched_qualifications": [
+    {
+      "regulation_id": "OSH-Reg-43",
+      "title": "職業安全衛生設施規則第 43 條 - 衝壓剪切機械操作資格",
+      "machine_category": "衝壓剪切機械",
+      "required_qualifications": [
+        "專任操作人員",
+        "安全檢驗合格",
+        "每日作業前檢點",
+        "安全防護具配戴"
+      ],
+      "summary": "依據《職業安全衛生設施規則第 43 條》：雇主對於衝壓剪切機械，應指派安全測驗合格之專任操作人員，每日作業前執行安全檢點，並落實定期保養紀錄與防呆驗證。",
+      "source_url": "/docs/OSH-Reg-43.pdf",
+      "raw_jaccard": 0.2525,
+      "jaccard_score": 0.4025
+    },
+    {
+      "regulation_id": "LIFT-REG-08",
+      "title": "升降機具與起重設備操作資格與年度代檢辦法",
+      "machine_category": "升降機具",
+      "required_qualifications": [
+        "吊掛作業人員證照",
+        "起重機操作執照",
+        "年度安全代檢合格",
+        "限制載重標示"
+      ],
+      "summary": "依據《升降機具安全檢查規則》：使用固定式或移動式起重機具者，操作人員必須領有國家考試合格證照，設備每年需通過定期檢查許可證展延。",
+      "source_url": "/docs/LIFT-REG-08.pdf",
+      "raw_jaccard": 0.0744,
+      "jaccard_score": 0.0744
+    },
+    {
+      "regulation_id": "CNS-1234",
+      "title": "CNS 1234 手持式電動工具檢驗與操作資格指引",
+      "machine_category": "電動工具",
+      "required_qualifications": [
+        "商品檢驗合格標籤",
+        "絕緣阻抗大於5M歐姆",
+        "防觸電保護裝置",
+        "操作安全培訓"
+      ],
+      "summary": "依據《CNS 1234 電動工具安規指引》：手持電動工具須貼有 R 字頭商品檢驗標籤，操作人員需接受基本電氣安全培訓，並隨時量測絕緣阻抗與洩漏電流。",
+      "source_url": "/docs/CNS-1234.pdf",
+      "raw_jaccard": 0.0382,
+      "jaccard_score": 0.0382
+    }
+  ],
+  "steps": [
+    {
+      "step_number": 1,
+      "step_name": "資料庫載入與設備類別篩選",
+      "description": "成功載入危險性機械資格資料庫，共 3 筆類別條文（目標類別：'衝壓剪切機械'）。",
+      "skill_name": "skill_02_machine_qualification_match",
+      "algorithm_used": "Categorical Pre-filtering",
+      "package_used": "json"
+    },
+    {
+      "step_number": 2,
+      "step_name": "查詢與憑證集合提取 (Set Extraction)",
+      "description": "對輸入之設備類別 '衝壓剪切機械'、憑證 [專任操作人員, 每日作業前檢點] 及查詢文字進行清洗與 N-gram 集合建構，共提取 34 個獨立元素。",
+      "skill_name": "skill_02_machine_qualification_match",
+      "algorithm_used": "Set Extraction & N-gram Tokenization",
+      "package_used": "re, Python Built-in Set"
+    },
+    {
+      "step_number": 3,
+      "step_name": "Jaccard 集合相似度矩陣計算",
+      "description": "計算輸入特徵集合與法規資格條文集合間之 Jaccard 重疊率：J(A, B) = |A ∩ B| / |A ∪ B|，若設備類別完全對齊給予類別權重加成。",
+      "skill_name": "skill_02_machine_qualification_match",
+      "algorithm_used": "Jaccard Similarity Coefficient",
+      "package_used": "Python Built-in Set Operations"
+    },
+    {
+      "step_number": 4,
+      "step_name": "KNN Top-K 近鄰排序擷取",
+      "description": "依 Jaccard 相似度得分降冪排序，採用 K-Nearest Neighbors (K=3) 擷取得分最高之 Top-3 筆資格條文，最高匹配分為 0.4025。",
+      "skill_name": "skill_02_machine_qualification_match",
+      "algorithm_used": "K-Nearest Neighbors (KNN)",
+      "package_used": "Python Built-in Sorting"
+    },
+    {
+      "step_number": 5,
+      "step_name": "Guardrail 得分防呆門檻比對與解答生成",
+      "description": "防呆檢核狀態：PASSED (Score 0.4025 >= Threshold 0.2)。門檻極限值：0.2。依據檢核結果自動輸出 Grounded 資格條文解答卡片或防呆提示。",
+      "skill_name": "skill_02_machine_qualification_match",
+      "algorithm_used": "Threshold-based Guardrail Evaluation",
+      "package_used": "Python Control Flow"
+    }
+  ]
+}
