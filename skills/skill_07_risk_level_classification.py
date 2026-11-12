@@ -1,121 +1,128 @@
-# -*- coding: utf-8 -*-
 """
-skill_07_risk_level_classification — 勝算比 (Odds Ratio) 與風險燈號劃分
+skill_07_risk_level_classification.py - 勝算比與風險燈號劃分技能
 
-對應：US-04 / 選單 07. 設備突發故障風險評估頁
-  odds = p / (1-p)；燈號：p ≥ θ → RED；p ≥ θ×yellow_ratio → YELLOW；否則 GREEN
-  θ 為預警門檻（通常來自 skill_08 的成本最佳門檻；未提供時以預設成本矩陣算出）
-純標準庫。
+對應系統規格：US-04 / 07. 設備突發故障風險評估頁
+演算法機制：機率與門檻防呆 -> 機率截斷 -> 勝算比 Odds = p/(1-p) = e^(wᵀx+b)
+            -> 紅黃綠燈號劃分 -> 飽和機率 Guardrail
+
+說明：規格書寫 Odds = e^(wᵀx)，但其範例（p=0.84 → 5.25）是 p/(1-p)，
+即 e^(wᵀx+b)（z 含截距），本技能採後者。
+燈號門檻預設：GREEN < 0.40 ≤ YELLOW < 0.70 ≤ RED，可由參數覆寫。
 """
+
+import json
 import math
 
 try:
-    from . import failure_core as fc
-    from . import skill_common as sc
+    from ._common import StepLog, default_output_path, save_json
+    from ._failure_model import PROB_EPS, clean_num
 except ImportError:
-    import failure_core as fc
-    import skill_common as sc
+    from _common import StepLog, default_output_path, save_json
+    from _failure_model import PROB_EPS, clean_num
 
-SKILL = "skill_07_risk_level_classification"
-DEFAULT_COST_DOWN = 50000.0
-DEFAULT_COST_INSPECT = 2000.0
-P_EPS = 1e-9
+SKILL_NAME = "skill_07_risk_level_classification"
+DEFAULT_YELLOW = 0.40
+DEFAULT_RED = 0.70
+
+PLAN = [
+    ("故障機率與燈號門檻防呆", "Boundary & Type Validation", "math"),
+    ("機率邊界截斷", "Probability Clipping [ε, 1-ε]", "math"),
+    ("勝算比與對數勝算計算", "Odds Ratio  p/(1-p) = e^z", "math"),
+    ("紅黃綠風險燈號劃分", "Threshold Band Classification", "Python Control Flow"),
+    ("飽和機率 Guardrail 檢核與處置建議生成", "Threshold-based Guardrail Evaluation", "Python Control Flow"),
+]
+
+LEVEL_META = {
+    "RED": ("紅燈：高風險", "建議立即安排停機檢修，並備妥關鍵備品。"),
+    "YELLOW": ("黃燈：注意", "建議縮短巡檢週期並於近期排入檢修。"),
+    "GREEN": ("綠燈：正常", "維持例行巡檢，持續監控警報次數與壓力。"),
+}
 
 
-def classify_risk_level(failure_probability=0.5, optimal_threshold=None, yellow_ratio=0.5,
-                        output_json_path=None, **_ignored):
-    steps = []
+def classify_risk_level(
+    failure_probability=None, yellow_threshold=DEFAULT_YELLOW, red_threshold=DEFAULT_RED,
+    output_json_path: str = None,
+) -> dict:
+    out_path = output_json_path or default_output_path("risk_level_result.json")
+    log = StepLog(SKILL_NAME, PLAN)
+    p_echo = clean_num(failure_probability)
 
-    def add(name, desc, algo, pkg):
-        steps.append(sc.make_step(len(steps) + 1, name, desc, SKILL, algo, pkg))
-
-    # ── 步驟 1：機率有效性 Guardrail ────────────────────────────
-    try:
-        p = float(failure_probability)
-        valid = math.isfinite(p) and 0.0 <= p <= 1.0
-    except (TypeError, ValueError):
-        p, valid = None, False
-    add("故障機率有效性 Guardrail",
-        f"收到 failure_probability={failure_probability!r}；" + ("位於 [0, 1]，通過。" if valid else "必須是 0~1 的有限數值，未通過。"),
-        "Range Guardrail", "math")
-    if not valid:
-        result = {"status": "success", "found": False,
-                  "answer_text": f"故障機率必須介於 0 到 1，收到：{failure_probability!r}。",
-                  "warnings": ["failure_probability 超出 [0,1]"], "data_source": "", "steps": steps}
-        sc.save_json(result, "risk_level_result.json", output_json_path)
+    def finish(result: dict) -> dict:
+        result["steps"] = log.steps
+        save_json(result, out_path)
         return result
 
-    # ── 步驟 2：勝算與 logit ───────────────────────────────────
-    pc = min(max(p, P_EPS), 1.0 - P_EPS)
-    odds = pc / (1.0 - pc)
-    logit = math.log(odds)
-    add("計算勝算 (Odds) 與 logit",
-        f"Odds = p/(1-p) = {pc:.4f}/{1 - pc:.4f} = {odds:.4f}（故障發生 : 不發生 ≈ {odds:.2f} : 1）；logit = ln(Odds) = {logit:+.3f}。"
-        + ("（p 觸及 0/1，已夾限在 1e-9 以避免除以零。）" if pc != p else ""),
-        "Odds Ratio  Odds=p/(1-p)", "math")
+    # 1. 防呆
+    errors = []
+    p = failure_probability
+    if p is None:
+        errors.append("缺少 failure_probability（前一步的故障機率計算可能被 Guardrail 攔截）")
+    elif isinstance(p, bool) or not isinstance(p, (int, float)):
+        errors.append("failure_probability 必須為數值")
+    elif not math.isfinite(p):
+        errors.append("failure_probability 不可為 NaN 或無限大")
+    elif not 0.0 <= p <= 1.0:
+        errors.append(f"failure_probability = {p:g} 必須介於 0 到 1")
 
-    # ── 步驟 3：單位勝算比（e^w）────────────────────────────────
-    model = fc.get_model()
-    feature_or = {k: round(math.exp(model["w_raw"][k]), 4) for k in fc.KEYS}
-    add("各特徵單位勝算比 e^w",
-        "每增加 1 單位，故障勝算變為原來的：" + "；".join(f"{fc.LABELS[k]}（{fc.UNITS[k]}）×{feature_or[k]:.3f}" for k in fc.KEYS)
-        + "。>1 表示增加故障風險。",
-        "Odds Ratio  OR=e^w", "math")
+    for name, v in (("yellow_threshold", yellow_threshold), ("red_threshold", red_threshold)):
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            errors.append(f"{name} 必須為有限數值")
+    if not errors and not 0.0 < yellow_threshold < red_threshold < 1.0:
+        errors.append(f"燈號門檻需滿足 0 < yellow < red < 1（收到 yellow={yellow_threshold:g}, red={red_threshold:g}）")
 
-    # ── 步驟 4：取得預警門檻 θ ─────────────────────────────────
-    th_source = "呼叫端提供（通常來自 skill_08 成本最佳門檻）"
-    try:
-        theta = None if optimal_threshold is None else float(optimal_threshold)
-        if theta is not None and not (math.isfinite(theta) and 0.0 < theta <= 1.0):
-            raise ValueError
-    except (TypeError, ValueError):
-        theta, th_source = None, "提供值不合法，改用預設"
-    if theta is None:
-        try:
-            from . import skill_08_cost_sensitive_threshold_tuning as s08
-        except ImportError:
-            import skill_08_cost_sensitive_threshold_tuning as s08
-        res08 = s08.tune_cost_sensitive_threshold(DEFAULT_COST_DOWN, DEFAULT_COST_INSPECT,
-                                                  output_json_path=_null_path())
-        theta = res08.get("optimal_threshold") or 0.5
-        if th_source == "提供值不合法，改用預設":
-            th_source += f"（預設成本 {DEFAULT_COST_DOWN:g}/{DEFAULT_COST_INSPECT:g}）"
-        else:
-            th_source = f"未提供，以預設成本矩陣（停機 {DEFAULT_COST_DOWN:g} / 誤報 {DEFAULT_COST_INSPECT:g}）算出"
-    try:
-        yr = float(yellow_ratio)
-        if not (0.0 < yr < 1.0):
-            raise ValueError
-    except (TypeError, ValueError):
-        yr = 0.5
-    yellow_th = round(theta * yr, 4)
-    add("取得預警門檻 θ", f"θ = {theta:.2f}（{th_source}）；黃燈下限 = θ × {yr:g} = {yellow_th:.2f}。",
-        "Cost-sensitive Threshold (引用 skill_08)", "math")
+    if errors:
+        log.add("輸入驗證失敗：" + "；".join(errors))
+        log.skip_to_last("輸入未通過驗證")
+        guardrail = "BLOCKED_BY_GUARDRAIL (invalid input)"
+        log.add(f"防呆檢核狀態：{guardrail}。")
+        return finish({"status": "success", "found": False, "failure_probability": p_echo,
+                       "odds_ratio": None, "risk_level": None, "warnings": errors,
+                       "guardrail_status": guardrail, "answer_text": "輸入未通過驗證：" + "；".join(errors)})
+    log.add(f"故障機率 {p:.4f} 為 [0,1] 內的有限數值；燈號門檻 黃 {yellow_threshold:g} / 紅 {red_threshold:g} 設定合理。")
 
-    # ── 步驟 5：燈號劃分 ───────────────────────────────────────
-    if p >= theta:
-        level, action = "RED", "機率已達預警門檻，建議派員檢修或排定停機檢查。"
-    elif p >= yellow_th:
-        level, action = "YELLOW", "機率偏高但未達門檻，建議加密巡檢並追蹤警報趨勢。"
+    # 2. 截斷
+    p_used = min(max(float(p), PROB_EPS), 1.0 - PROB_EPS)
+    clipped = p_used != float(p)
+    log.add(f"為避免 p=0 或 p=1 時勝算比為 0 / 無限大，將機率截斷至 [{PROB_EPS:g}, {1 - PROB_EPS:.6f}]"
+            + (f"（本次由 {p:g} 截為 {p_used:g}）。" if clipped else "（本次無需截斷）。"))
+
+    # 3. 勝算比
+    odds = p_used / (1.0 - p_used)
+    log_odds = math.log(odds)
+    log.add(f"Odds = p/(1-p) = {p_used:.4f}/{1 - p_used:.4f} = {odds:.4f}；對數勝算 ln(Odds) = {log_odds:+.4f}"
+            "（即線性分數 z = wᵀx + b）。")
+
+    # 4. 燈號
+    if p_used >= red_threshold:
+        level = "RED"
+    elif p_used >= yellow_threshold:
+        level = "YELLOW"
     else:
-        level, action = "GREEN", "風險低於黃燈下限，維持例行保養即可。"
-    add("風險燈號劃分",
-        f"p={p:.4f} vs θ={theta:.2f}、黃燈下限 {yellow_th:.2f} → {level}。",
-        "Threshold-based Risk Classification", "math")
+        level = "GREEN"
+    label, action = LEVEL_META[level]
+    log.add(f"依門檻劃分：p={p_used:.4f}，黃 ≥ {yellow_threshold:g}、紅 ≥ {red_threshold:g} → {level}。")
 
-    result = {
-        "status": "success", "found": True, "data_source": model["data_source"],
-        "failure_probability": round(p, 4), "odds_ratio": round(odds, 4), "logit": round(logit, 4),
-        "risk_level": level, "optimal_threshold": theta, "yellow_threshold": yellow_th,
-        "feature_odds_ratios": feature_or, "warnings": [],
-        "answer_text": f"故障機率 {p:.1%}、勝算比 {odds:.2f}，風險燈號 {level}。{action}",
-        "steps": steps,
-    }
-    sc.save_json(result, "risk_level_result.json", output_json_path)
-    return result
+    # 5. Guardrail
+    warnings = []
+    if p_used <= 0.001 or p_used >= 0.999:
+        warnings.append("機率已接近 0 或 1（Sigmoid 飽和），此時勝算比的數值意義有限，請以燈號與工況為主")
+    guardrail = "PASSED" if not warnings else "PASSED_WITH_WARNINGS"
+    log.add(f"防呆檢核狀態：{guardrail}。" + ("；".join(warnings) if warnings else "機率未飽和，勝算比可正常解讀。"))
+
+    answer = (f"{label}。故障勝算比 {odds:.2f}：故障發生的可能性是不發生的 {odds:.2f} 倍"
+              if odds >= 1 else
+              f"{label}。故障勝算比 {odds:.2f}：故障發生的可能性僅為不發生的 {odds:.2f} 倍")
+    return finish({
+        "status": "success", "found": True,
+        "failure_probability": round(float(p), 4), "probability_used": round(p_used, 6),
+        "odds_ratio": round(odds, 4), "log_odds": round(log_odds, 4),
+        "risk_level": level, "risk_label": label, "recommended_action": action,
+        "thresholds": {"yellow": yellow_threshold, "red": red_threshold},
+        "warnings": warnings, "guardrail_status": guardrail,
+        "answer_text": f"{answer}。{action}",
+    })
 
 
-def _null_path():
-    """內部呼叫 skill_08 取預設門檻時，不要覆寫使用者真正的 skill_08 輸出檔。"""
-    import os
-    return os.path.join(sc.project_root(), "output", "_internal_default_threshold.json")
+if __name__ == "__main__":
+    print("=== 測試 SKILL: skill_07_risk_level_classification ===")
+    print(json.dumps(classify_risk_level(0.84), ensure_ascii=False, indent=2))
