@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>02. 製造規範與技術文件收錄頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xs border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm font-semibold tracking-wide">正在查詢文件目錄，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 切片預覽抽屜 -->
+    <div id="drawerMask" class="fixed inset-0 bg-slate-900/30 z-30 hidden"></div>
+    <aside id="drawer" aria-label="文件預覽" class="fixed top-0 right-0 h-full w-full sm:w-[28rem] bg-white shadow-xl border-l border-slate-200 z-40 translate-x-full transition-transform overflow-y-auto">
+        <div class="p-5 space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <h2 id="drawerTitle" class="text-sm font-bold text-slate-900 break-words">文件預覽</h2>
+                <button id="drawerClose" type="button" class="text-slate-500 hover:text-slate-800 text-lg leading-none cursor-pointer" aria-label="關閉">✕</button>
+            </div>
+            <dl id="drawerMeta" class="text-xs grid grid-cols-3 gap-x-2 gap-y-1.5"></dl>
+            <div id="drawerSource" class="text-xs"></div>
+            <div class="text-xs font-semibold text-slate-600">切片預覽 <span id="drawerCount" class="font-normal text-slate-400"></span></div>
+            <div id="drawerChunks" class="space-y-2"></div>
+            <p id="drawerMsg" class="text-xs text-slate-500"></p>
+        </div>
+    </aside>
+
+    <!-- 頂部 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">製造規範與技術文件收錄</h1>
+                    <p class="text-xs text-slate-500">系統頁面：02. 製造規範與技術文件收錄頁 (/knowledge/documents) | US-17</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span id="viewBadge" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">👤 身分：一般民眾（公開文件）</span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">🤖 MCP Tool：skill_26</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6 min-w-0">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>文件來源：</strong>docs/ 資料夾＋匯入索引（data/kb_index.sqlite）</span>
+                    <span>🧮 <strong>機制：</strong>sqlite3 參數化過濾（角色、類別、日期、關鍵字）</span>
+                </div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>民眾身分只會看到管理者在 <code>data/catalog_manifest.json</code> 明確宣告為「公開」的文件，沒有登記的文件一律視為內部資料。
+                    類別帶「推測」標記者是依檔名猜的，授權顯示「未標註」者表示尚未登記，兩者都不是文件本身的正式資訊。
+                    匯入的文件只能用預覽（前 200 字）比對關鍵字；本頁只列出文件與出處，不代表內容為現行有效法規，請以官方公告為準。
+                </div>
+            </section>
+
+            <!-- 篩選工具列 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-sm font-semibold text-slate-800 mb-1.5">瀏覽身分</div>
+                        <div class="flex flex-wrap gap-4 text-sm">
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="radio" name="view" value="public" checked class="accent-sky-600"> 一般民眾（公開文件）</label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="radio" name="view" value="internal" class="accent-sky-600"> 內部人員（全部文件）</label>
+                        </div>
+                    </div>
+                    <div id="tokenBox" class="hidden">
+                        <label for="tokenInput" class="block text-sm font-semibold text-slate-800 mb-1.5">存取權杖（伺服器有設定時才需要）</label>
+                        <input id="tokenInput" type="password" autocomplete="off" placeholder="只保存在這個分頁的記憶體"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-sm font-semibold text-slate-800 mb-1.5">類別 <span class="text-xs font-normal text-slate-400">（不勾選＝全部；選項來自目前可見的文件）</span></div>
+                    <div id="catBox" class="flex flex-wrap gap-x-4 gap-y-1.5 text-sm"><span class="text-xs text-slate-400">載入中...</span></div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label for="startDate" class="block text-sm font-semibold text-slate-800 mb-1.5">更新日期（起）</label>
+                        <input id="startDate" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label for="endDate" class="block text-sm font-semibold text-slate-800 mb-1.5">更新日期（迄）</label>
+                        <input id="endDate" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label for="keyword" class="block text-sm font-semibold text-slate-800 mb-1.5">關鍵字</label>
+                        <input id="keyword" type="text" maxlength="100" placeholder="例如：電動工具"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button id="applyBtn" type="button" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold rounded-lg shadow-xs cursor-pointer">套用篩選</button>
+                    <button id="resetBtn" type="button" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-sm rounded-lg cursor-pointer">清除條件</button>
+                    <button id="exportBtn" type="button" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-sm rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" disabled>匯出文件清單 (CSV)</button>
+                </div>
+            </section>
+
+            <!-- Guardrail 卡 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">🛡️ 安全檢核攔截 (Guardrail)</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 文件表格 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">📚 文件清單 <span class="text-[11px] font-normal text-slate-400">#SK-26</span></span>
+                    <span id="totalText" class="text-xs text-slate-500"></span>
+                </div>
+                <ul id="warnList" class="list-disc pl-5 text-xs text-amber-800 space-y-0.5 hidden"></ul>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs border border-slate-200">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr><th class="text-left p-2">文件編號</th><th class="text-left p-2">名稱</th><th class="text-left p-2">類別</th><th class="text-left p-2">更新日期</th><th class="text-left p-2">授權</th><th class="text-left p-2">操作</th></tr>
+                        </thead>
+                        <tbody id="docRows"><tr><td colspan="6" class="p-3 text-slate-400 italic">載入中...</td></tr></tbody>
+                    </table>
+                </div>
+                <div class="flex items-center justify-between text-xs">
+                    <button id="prevBtn" type="button" class="px-3 py-1 border border-slate-300 rounded-md hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">上一頁</button>
+                    <span id="pageText" class="text-slate-500"></span>
+                    <button id="nextBtn" type="button" class="px-3 py-1 border border-slate-300 rounded-md hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">下一頁</button>
+                </div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_26（文件目錄查詢）</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未執行...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const show = (id, on) => $(id).classList.toggle('hidden', !on);
+        const safeUrl = (u) => (typeof u === 'string' && /^https?:\/\/[^\s<>"']+$/i.test(u)) ? u : '';
+        const PAGE = 20;
+
+        let view = 'public';
+        let offset = 0;
+        let total = 0;
+        let lastDocs = [];
+        let selectedCats = new Set();
+        let catsLoadedFor = null;
+
+        const hdr = () => {
+            const h = { 'Content-Type': 'application/json' };
+            const t = $('tokenInput').value.trim();
+            if (t) h['X-Import-Token'] = t;
+            return h;
+        };
+        function guard(message, list) {
+            show('guardCard', !!message);
+            $('guardMessage').textContent = message || '';
+            $('guardList').innerHTML = (list || []).map((x) => `<li>${esc(x)}</li>`).join('');
+        }
+
+        // ---------- 查詢 ----------
+        function readFilters() {
+            return {
+                view, categories: Array.from(selectedCats), start_date: $('startDate').value || null, end_date: $('endDate').value || null,
+                keyword: $('keyword').value.trim() || null, limit: PAGE, offset,
+            };
+        }
+
+        async function load(resetPage) {
+            if (resetPage) offset = 0;
+            guard('');
+            show('loadingOverlay', true);
+            try {
+                const res = await fetch('/api/documents', { method: 'POST', headers: hdr(), body: JSON.stringify(readFilters()) });
+                const d = await res.json();
+                if (!res.ok || d.status === 'error') {
+                    guard(d.answer_text || `查詢失敗（HTTP ${res.status}）`);
+                    $('docRows').innerHTML = '<tr><td colspan="6" class="p-3 text-slate-400 italic">無法載入</td></tr>';
+                    lastDocs = []; $('exportBtn').disabled = true;
+                    return;
+                }
+                if (d.found === false && d.guardrail_status && d.guardrail_status.startsWith('BLOCKED')) {
+                    guard(d.answer_text, d.warnings);
+                }
+                render(d);
+            } catch (err) {
+                guard('無法連線到後端：' + err.message);
+            } finally {
+                show('loadingOverlay', false);
+            }
+        }
+
+        function renderCats(list) {
+            const key = view + '|' + JSON.stringify(list);
+            if (catsLoadedFor === key) return;
+            catsLoadedFor = key;
+            selectedCats = new Set(Array.from(selectedCats).filter((c) => list.some((x) => x.category === c)));
+            $('catBox').innerHTML = list.length ? list.map((x, i) => `
+                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" data-cat="${i}" ${selectedCats.has(x.category) ? 'checked' : ''} class="accent-sky-600 cat"> ${esc(x.category)} <span class="text-slate-400">(${x.count})</span></label>`).join('')
+                : '<span class="text-xs text-slate-400">目前沒有可選的類別</span>';
+            document.querySelectorAll('.cat').forEach((el) => el.addEventListener('change', (e) => {
+                const c = list[+e.target.dataset.cat].category;
+                if (e.target.checked) selectedCats.add(c); else selectedCats.delete(c);
+            }));
+        }
+
+        function render(d) {
+            total = d.total || 0;
+            lastDocs = d.documents || [];
+            renderCats(d.categories_available || []);
+            $('totalText').textContent = d.answer_text || '';
+            const w = d.warnings || [];
+            $('warnList').innerHTML = w.map((x) => `<li>${esc(x)}</li>`).join('');
+            show('warnList', w.length > 0);
+            $('docRows').innerHTML = lastDocs.length ? lastDocs.map((x, i) => {
+                const url = safeUrl(x.source_url);
+                return `<tr class="border-t border-slate-100 align-top">
+                    <td class="p-2 break-all whitespace-nowrap">${esc(x.doc_id)}</td>
+                    <td class="p-2"><div class="font-medium text-slate-800">${esc(x.source_name)}</div><div class="text-[11px] text-slate-400">${esc(x.content_preview)}</div></td>
+                    <td class="p-2 whitespace-nowrap">${esc(x.category)}${x.category_inferred ? ' <span class="text-[10px] px-1 rounded bg-amber-50 text-amber-700 border border-amber-200">推測</span>' : ''}
+                        ${view === 'internal' ? (x.is_public ? ' <span class="text-[10px] px-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">公開</span>' : ' <span class="text-[10px] px-1 rounded bg-slate-100 text-slate-600 border border-slate-200">內部</span>') : ''}</td>
+                    <td class="p-2 whitespace-nowrap tabular-nums">${esc(x.updated_at)}</td>
+                    <td class="p-2 ${x.license_type === '未標註' ? 'text-amber-700' : ''}">${esc(x.license_type)}</td>
+                    <td class="p-2 whitespace-nowrap"><button data-i="${i}" class="view-btn text-sky-700 hover:underline cursor-pointer">檢視</button>
+                        ${url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="text-sky-700 hover:underline">原文連結</a>` : ' · <span class="text-slate-400">無原文連結</span>'}</td></tr>`;
+            }).join('') : `<tr><td colspan="6" class="p-3 text-slate-500">${esc(d.answer_text || '查無符合條件的文件')}</td></tr>`;
+            document.querySelectorAll('.view-btn').forEach((el) => el.addEventListener('click', (e) => openDrawer(lastDocs[+e.target.dataset.i])));
+            const pages = Math.max(1, Math.ceil(total / PAGE));
+            $('pageText').textContent = total ? `第 ${Math.floor(offset / PAGE) + 1} / ${pages} 頁` : '';
+            $('prevBtn').disabled = offset <= 0;
+            $('nextBtn').disabled = offset + PAGE >= total;
+            $('exportBtn').disabled = !lastDocs.length;
+            renderSteps(d.steps || []);
+        }
+
+        // ---------- 預覽抽屜 ----------
+        function setDrawer(open) {
+            $('drawer').classList.toggle('translate-x-full', !open);
+            show('drawerMask', open);
+        }
+        async function openDrawer(doc) {
+            if (!doc) return;
+            $('drawerTitle').textContent = doc.source_name;
+            $('drawerMeta').innerHTML = ''; $('drawerChunks').innerHTML = ''; $('drawerSource').innerHTML = ''; $('drawerCount').textContent = ''; $('drawerMsg').textContent = '載入中...';
+            setDrawer(true);
+            try {
+                const res = await fetch('/api/documents/preview', { method: 'POST', headers: hdr(), body: JSON.stringify({ doc_id: doc.doc_id, view }) });
+                const d = await res.json();
+                if (!res.ok || !d.found) { $('drawerMsg').textContent = d.answer_text || '無法載入預覽'; return; }
+                const m = d.document;
+                const row = (k, v) => `<dt class="text-slate-500">${k}</dt><dd class="col-span-2 break-words">${esc(v ?? '--')}</dd>`;
+                $('drawerMeta').innerHTML = row('文件編號', m.doc_id) + row('類別', m.category + (m.category_inferred ? '（推測）' : '')) + row('更新日期', m.updated_at) +
+                    row('授權', m.license_type) + row('字數', m.char_count) + row('來源', m.origin === 'import' ? '匯入索引' : 'docs/ 資料夾') +
+                    (m.imported_at ? row('收錄時間', m.imported_at) : '');
+                const url = safeUrl(m.source_url);
+                $('drawerSource').innerHTML = url ? `📌 原始出處：<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="text-sky-700 hover:underline break-all">${esc(url)}</a>`
+                    : `<span class="text-slate-500">📌 原始出處：${m.source_url ? esc(m.source_url) + '（內部位址，無法開啟）' : '尚未登記'}</span>`;
+                $('drawerCount').textContent = `（共 ${d.total_chunks} 個，滑動視窗 500 字／重疊 50 字）`;
+                $('drawerChunks').innerHTML = (d.chunks || []).map((c) => `<div class="border border-slate-200 rounded-lg p-2.5 text-xs bg-slate-50"><div class="text-[10px] text-slate-400 mb-1">切片 #${c.seq}</div><div class="whitespace-pre-wrap break-words leading-relaxed">${esc(c.text)}</div></div>`).join('');
+                $('drawerMsg').textContent = d.truncated ? `只顯示前 ${d.chunks.length} 個切片。` : '';
+            } catch (err) {
+                $('drawerMsg').textContent = '無法連線到後端：' + err.message;
+            }
+        }
+
+        // ---------- 匯出 CSV（目前頁面） ----------
+        function csvCell(v) {
+            let s = String(v ?? '');
+            if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;           // 避免 Excel 公式注入
+            return '"' + s.replace(/"/g, '""') + '"';
+        }
+        function exportCsv() {
+            const head = ['doc_id', 'source_name', 'category', 'updated_at', 'license_type', 'source_url'];
+            const lines = [head.join(',')].concat(lastDocs.map((d) => head.map((k) => csvCell(k === 'source_url' ? safeUrl(d[k]) : d[k])).join(',')));
+            const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'document_list.csv';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
+
+        // ---------- 步驟日誌 ----------
+        function renderSteps(steps) {
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            box.innerHTML = steps.map((s) => `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`).join('');
+        }
+
+        // ---------- 事件 ----------
+        document.querySelectorAll('input[name="view"]').forEach((el) => el.addEventListener('change', (e) => {
+            view = e.target.value;
+            selectedCats = new Set(); catsLoadedFor = null;
+            const b = $('viewBadge');
+            b.textContent = view === 'public' ? '👤 身分：一般民眾（公開文件）' : '👤 身分：內部人員（全部文件）';
+            b.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ' + (view === 'public' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-sky-50 text-sky-700 border-sky-200');
+            show('tokenBox', view === 'internal');
+            load(true);
+        }));
+        $('applyBtn').addEventListener('click', () => load(true));
+        $('keyword').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(true); });
+        $('resetBtn').addEventListener('click', () => {
+            selectedCats = new Set(); catsLoadedFor = null;
+            $('startDate').value = ''; $('endDate').value = ''; $('keyword').value = '';
+            load(true);
+        });
+        $('prevBtn').addEventListener('click', () => { offset = Math.max(0, offset - PAGE); load(false); });
+        $('nextBtn').addEventListener('click', () => { offset += PAGE; load(false); });
+        $('exportBtn').addEventListener('click', exportCsv);
+        $('drawerClose').addEventListener('click', () => setDrawer(false));
+        $('drawerMask').addEventListener('click', () => setDrawer(false));
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setDrawer(false); });
+        $('tokenInput').addEventListener('change', () => load(true));
+
+        load(true);
+    </script>
+</body>
+</html>

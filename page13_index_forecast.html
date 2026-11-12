@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>13. 智慧生產指數預測與管理頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xs border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" width="20" height="20">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span id="overlayText" class="text-sm font-semibold tracking-wide">正在訓練 MLP、建立階層樹並排程，請稍候（約 3–5 秒）...</span>
+        </div>
+    </div>
+
+    <!-- 頂部導覽 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">智慧生產指數預測與管理</h1>
+                    <p class="text-xs text-slate-500">系統頁面：13. 智慧生產指數預測與管理頁 (/production/index-forecast) | US-14 / US-15</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">👤 角色：生產排程主管 / 廠長</span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">🤖 MCP Tools：skill_23 / 24 / 25</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6 min-w-0">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>IPI 資料：</strong><span id="ipiSourceLabel">尚未執行</span></span>
+                    <span>🏭 <strong>設備資料：</strong><span id="equipSourceLabel">尚未執行</span></span>
+                    <span>🧮 <strong>演算法：</strong>MLP（反向傳播）＋ 凝聚階層式分群</span>
+                </div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>預測結果僅供參考：</strong>未放入 data/ipi_monthly.csv、data/equipment_risk.csv 時使用合成的示範資料，不是真實統計或產線紀錄。
+                    MLP 預測的是「未來 1–3 個月相對當月的變化量」，並與「延續上月」基準比較；沒有勝過基準時會明講。
+                    風險層級是設備之間的<strong>相對</strong>排名，排程為單一班組的簡化規則，需由主管依停機窗口、備品與人力調整。
+                </div>
+            </section>
+
+            <!-- 輸入面板 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <div>
+                            <div class="text-sm font-semibold text-slate-800 mb-1.5">預測變數（MLP 輸入）</div>
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="ft accent-sky-600" value="ipi" checked> IPI 歷史變化</label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="ft accent-sky-600" value="export" checked> 出口訂單</label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="ft accent-sky-600" value="util" checked> 設備稼動率</label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="ft accent-sky-600" value="season" checked> 季節變數</label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 text-sm">
+                            <label class="space-y-1"><span class="text-slate-600 text-xs">訓練 epoch</span>
+                                <input id="epochs" type="number" min="10" max="5000" step="50" value="500" class="w-full px-2 py-1.5 border border-slate-300 rounded-md text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500"></label>
+                            <label class="space-y-1"><span class="text-slate-600 text-xs">學習率 η</span>
+                                <input id="lr" type="number" min="0.001" max="1" step="0.01" value="0.05" class="w-full px-2 py-1.5 border border-slate-300 rounded-md text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500"></label>
+                            <label class="space-y-1"><span class="text-slate-600 text-xs">隱藏單元數</span>
+                                <input id="hidden" type="number" min="2" max="32" step="1" value="6" class="w-full px-2 py-1.5 border border-slate-300 rounded-md text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500"></label>
+                        </div>
+                        <div class="text-[11px] text-slate-400">epoch 不是越多越好：過度訓練會讓訓練誤差下降、測試誤差反而上升（過擬合），頁面會警告。</div>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <div class="text-sm font-semibold text-slate-800 mb-1.5">設備風險指標（階層分群輸入）</div>
+                            <div class="flex flex-wrap gap-4 text-sm">
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="ind accent-sky-600" value="failure_rate" checked> 故障率</label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="ind accent-sky-600" value="mtbf_hours" checked> MTBF</label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="ind accent-sky-600" value="load_pct" checked> 運轉負載</label>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 text-sm">
+                            <label for="linkage" class="text-slate-600">連結法</label>
+                            <select id="linkage" class="px-2 py-1.5 border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                <option value="average">average（平均）</option>
+                                <option value="complete">complete（最遠鄰）</option>
+                                <option value="single">single（最近鄰）</option>
+                            </select>
+                            <label for="capacity" class="text-slate-600 ml-2">每週可保養台數</label>
+                            <input id="capacity" type="number" min="1" max="20" step="1" value="3" class="w-16 px-2 py-1.5 border border-slate-300 rounded-md text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                        <div class="space-y-1.5">
+                            <div class="flex items-center justify-between gap-2 text-sm">
+                                <label for="thrNum" class="text-slate-600">分群距離門檻（留空＝自動建議）</label>
+                                <div class="flex items-center gap-2">
+                                    <input id="thrNum" type="number" min="0.05" step="0.05" value="1.6" class="w-20 px-2 py-1.5 border border-slate-300 rounded-md text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                    <button id="sugBtn" type="button" class="px-2 py-1.5 text-xs border border-slate-300 rounded-md hover:bg-slate-50 cursor-pointer">套用建議值</button>
+                                </div>
+                            </div>
+                            <input id="thrRng" type="range" min="0.05" max="4" step="0.05" value="1.6" aria-label="分群距離門檻" class="w-full accent-purple-600 cursor-pointer">
+                            <div class="text-[11px] text-slate-400">門檻越小，風險階層越多。拖曳或輸入後會立即重新切樹與排程（不重訓 MLP）。</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2 pt-1">
+                    <button id="runBtn" type="button" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold rounded-lg shadow-xs cursor-pointer">生成指數預測與預防維護甘特圖</button>
+                </div>
+            </section>
+
+            <!-- Guardrail 卡 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">🛡️ 安全檢核攔截 (Guardrail)</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 預測區 -->
+            <section id="fcSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">📈 IPI 預測（未來三個月） <span class="text-[11px] font-normal text-slate-400">#SK-23</span>
+                        <span class="ml-2 px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-semibold">僅供參考</span></span>
+                    <span id="fcBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                </div>
+                <p id="fcAnswer" class="text-sm text-slate-700"></p>
+                <ul id="fcWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                <div id="fcCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs"></div>
+                <div>
+                    <div class="text-xs font-bold text-slate-600 mb-1">IPI 歷史走勢與預測（陰影＝測試期；帶狀＝預測 ± 1.96×測試 RMSE 的粗略區間）</div>
+                    <div id="fcChart"></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs font-bold text-slate-600 mb-1">訓練損失收斂曲線（標準化 MSE，三個預測期各一條）</div>
+                        <div id="lossChart"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-slate-600 mb-1">測試期逐月檢驗（預測下個月）：實際 vs. 模型 vs. 延續上月</div>
+                        <div id="testChart"></div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto"><table id="hTable" class="text-xs border-collapse w-full"></table></div>
+                <div id="hpNote" class="text-[11px] text-slate-400"></div>
+            </section>
+
+            <!-- 風險階層區 -->
+            <section id="dgSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🌲 設備風險階層樹（Dendrogram） <span class="text-[11px] font-normal text-slate-400">#SK-24 → #SK-25</span></span>
+                    <span class="flex gap-2"><span id="hBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span><span id="dBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span></span>
+                </div>
+                <p id="dgAnswer" class="text-sm text-slate-700"></p>
+                <ul id="dgWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">風險階層數</div><div id="dK" class="text-xl font-bold tabular-nums"></div><div id="dThr" class="text-[11px] text-slate-400"></div></div>
+                    <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">共生相關係數</div><div id="dCcc" class="text-xl font-bold tabular-nums"></div><div class="text-[11px] text-slate-400">越接近 1 樹越忠實</div></div>
+                    <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">平均輪廓係數</div><div id="dSil" class="text-xl font-bold tabular-nums"></div><div class="text-[11px] text-slate-400">切割後的群分離程度</div></div>
+                    <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">預防維護總週數</div><div id="dWeeks" class="text-xl font-bold tabular-nums"></div><div id="dCap" class="text-[11px] text-slate-400"></div></div>
+                </div>
+                <div id="dgChart" class="overflow-x-auto"></div>
+                <div class="text-[11px] text-slate-500">虛線＝分群距離門檻；門檻以下的分支依風險階層著色，門檻以上的灰色分支是尚未被切開的合併。</div>
+                <div id="riskSummary" class="text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700"></div>
+                <div id="groupCards" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+            </section>
+
+            <!-- 甘特圖 -->
+            <section id="ganttSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🗓️ 預防維護甘特圖</span>
+                    <span class="text-xs text-slate-500">依群風險高→低、群內風險高→低排序；單一班組、每週上限台數固定</span>
+                </div>
+                <div id="ganttChart" class="overflow-x-auto"></div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_23（MLP 預測）；skill_24（建樹）→ skill_25（切樹與排程）</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未執行...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const TIER_COLOR = { '高風險': '#e11d48', '中風險': '#d97706', '低風險': '#0d9488', '未分層': '#64748b' };
+        const EXTRA = ['#7c3aed', '#0284c7', '#db2777', '#65a30d', '#0891b2', '#9333ea'];
+        const LINE = { m: '#0284c7', f: '#e11d48', b: '#94a3b8', h2: '#7c3aed', h3: '#d97706' };
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const isNum = (n) => typeof n === 'number' && isFinite(n);
+        const fmt = (n, d = 2) => isNum(n) ? n.toFixed(d) : '--';
+        const show = (id, on) => $(id).classList.toggle('hidden', !on);
+        let lastSuggest = null, lastForecastSteps = [], lastForecast = null, lastData = null, recutTimer = null, busy = false;
+
+        function badge(el, text, color) {
+            const map = { green: 'bg-emerald-50 text-emerald-700 border-emerald-200', amber: 'bg-amber-50 text-amber-700 border-amber-200', rose: 'bg-rose-50 text-rose-700 border-rose-200' };
+            el.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + map[color];
+            el.textContent = text;
+        }
+        function statusBadge(el, r, prefix = '') {
+            const g = String((r && r.guardrail_status) || '');
+            if (g.startsWith('BLOCKED')) badge(el, prefix + '已攔截', 'rose');
+            else if (g.includes('WARN')) badge(el, prefix + '通過（有警告）', 'amber');
+            else badge(el, prefix + '通過', 'green');
+        }
+        const warnList = (el, arr) => { el.innerHTML = (arr || []).map((w) => `<li>${esc(w)}</li>`).join(''); };
+        const card = (title, value, sub, cls = '') => `<div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">${title}</div><div class="text-xl font-bold tabular-nums ${cls}">${value}</div><div class="text-[11px] text-slate-400">${sub || ''}</div></div>`;
+
+        // ---------- 繪圖輔助 ----------
+        function ticks(lo, hi, n = 5) {
+            if (!(hi > lo)) hi = lo + 1;
+            const raw = (hi - lo) / n, p = Math.pow(10, Math.floor(Math.log10(raw)));
+            const step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw) || raw;
+            const out = [];
+            for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
+            return out;
+        }
+        function frame(W, H, M, xlo, xhi, ylo, yhi, xlabel, ylabel, xt) {
+            const sx = (v) => M.l + (v - xlo) / (xhi - xlo) * (W - M.l - M.r);
+            const sy = (v) => H - M.b - (v - ylo) / (yhi - ylo) * (H - M.t - M.b);
+            let g = '';
+            ticks(ylo, yhi).forEach((t) => { g += `<line x1="${M.l}" x2="${W - M.r}" y1="${sy(t)}" y2="${sy(t)}" stroke="#e2e8f0"/><text x="${M.l - 6}" y="${sy(t) + 3}" text-anchor="end" font-size="10" fill="#64748b">${+t.toFixed(3)}</text>`; });
+            (xt || ticks(xlo, xhi)).forEach((t) => { g += `<line y1="${M.t}" y2="${H - M.b}" x1="${sx(t)}" x2="${sx(t)}" stroke="#f1f5f9"/><text x="${sx(t)}" y="${H - M.b + 14}" text-anchor="middle" font-size="10" fill="#64748b">${+t.toFixed(3)}</text>`; });
+            g += `<rect x="${M.l}" y="${M.t}" width="${W - M.l - M.r}" height="${H - M.t - M.b}" fill="none" stroke="#cbd5e1"/>`;
+            g += `<text x="${(M.l + W - M.r) / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="#475569">${esc(xlabel)}</text>`;
+            g += `<text transform="translate(12 ${(M.t + H - M.b) / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="#475569">${esc(ylabel)}</text>`;
+            return { sx, sy, g };
+        }
+        const svgWrap = (W, H, inner, label) => `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="${esc(label)}" font-family="sans-serif">${inner}</svg>`;
+        const poly = (pts, color, w = 2, dash = '') => `<polyline fill="none" stroke="${color}" stroke-width="${w}" ${dash ? `stroke-dasharray="${dash}"` : ''} points="${pts.map((p) => p.join(',')).join(' ')}"/>`;
+
+        // ---------- 預測 ----------
+        function renderForecast(d) {
+            const f = d.forecast;
+            show('fcSection', !!f);
+            if (!f) return;
+            statusBadge($('fcBadge'), f);
+            $('fcAnswer').textContent = f.answer_text || '';
+            warnList($('fcWarn'), f.warnings);
+            if (!f.found) { $('fcCards').innerHTML = ''; ['fcChart', 'lossChart', 'testChart'].forEach((i) => { $(i).innerHTML = ''; }); $('hTable').innerHTML = ''; $('hpNote').textContent = ''; return; }
+            const fc = f.ipi_forecast_next_quarter, iv = f.forecast_interval, fm = d.ipi.forecast_months;
+            $('fcCards').innerHTML = fc.map((v, i) => card(`${fm[i]}（+${i + 1} 個月）`, fmt(v, 1), `區間 ${fmt(iv[i][0], 1)} – ${fmt(iv[i][1], 1)}`)).join('') +
+                card('整體測試 RMSE', fmt(f.test_rmse, 2), `延續上月基準 ${fmt(f.baseline_rmse, 2)}`, f.beats_baseline ? 'text-emerald-600' : 'text-rose-600');
+
+            // 走勢圖：最近 36 個月 + 預測
+            const vals = d.ipi.values, months = d.ipi.months, N = vals.length, show_n = Math.min(36, N), s0 = N - show_n;
+            const W = 760, H = 300, M = { l: 52, r: 20, t: 14, b: 40 };
+            const all = vals.slice(s0).concat(fc, iv.map((x) => x[0]), iv.map((x) => x[1]));
+            const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.08;
+            const x0 = 0, x1 = show_n + 2;
+            const fr = frame(W, H, M, x0, x1, lo - pad, hi + pad, '月份', 'IPI', []);
+            let inner = '';
+            const tIdx = f.split_index - s0;
+            if (tIdx < show_n) inner += `<rect x="${fr.sx(Math.max(0, tIdx - 0.5))}" y="${M.t}" width="${fr.sx(show_n - 0.5) - fr.sx(Math.max(0, tIdx - 0.5))}" height="${H - M.t - M.b}" fill="#f1f5f9"/>`;
+            inner += fr.g;
+            for (let i = 0; i < show_n; i += 6) inner += `<text x="${fr.sx(i)}" y="${H - M.b + 14}" text-anchor="middle" font-size="10" fill="#64748b">${months[s0 + i]}</text>`;
+            for (let h = 0; h < 3; h += 2) inner += `<text x="${fr.sx(show_n + h)}" y="${H - M.b + 14}" text-anchor="middle" font-size="10" fill="#e11d48">${fm[h]}</text>`;
+            const hist = vals.slice(s0).map((v, i) => [fr.sx(i).toFixed(1), fr.sy(v).toFixed(1)]);
+            const last = hist[hist.length - 1];
+            const fpts = [last].concat(fc.map((v, i) => [fr.sx(show_n + i).toFixed(1), fr.sy(v).toFixed(1)]));
+            const upper = [last].concat(iv.map((x, i) => [fr.sx(show_n + i).toFixed(1), fr.sy(x[1]).toFixed(1)]));
+            const lower = [last].concat(iv.map((x, i) => [fr.sx(show_n + i).toFixed(1), fr.sy(x[0]).toFixed(1)])).reverse();
+            inner += `<polygon points="${upper.concat(lower).map((p) => p.join(',')).join(' ')}" fill="#e11d48" fill-opacity="0.12"/>`;
+            inner += poly(hist, LINE.m, 2) + poly(fpts, LINE.f, 2, '5 3');
+            inner += fc.map((v, i) => `<circle cx="${fr.sx(show_n + i)}" cy="${fr.sy(v)}" r="4.5" fill="#e11d48" stroke="#fff" stroke-width="1.5"/>`).join('');
+            inner += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#0284c7"/>`;
+            $('fcChart').innerHTML = svgWrap(W, H, inner, 'IPI 走勢與預測');
+
+            // 損失曲線
+            const LW = 380, LH = 240, LM = { l: 50, r: 14, t: 12, b: 38 };
+            const hs = f.loss_history_all, cols = [LINE.m, LINE.h2, LINE.h3];
+            const maxE = Math.max(...Object.values(hs).map((a) => a[a.length - 1][0]));
+            const maxL = Math.max(...Object.values(hs).map((a) => Math.max(...a.map((p) => p[1]))));
+            const lf = frame(LW, LH, LM, 0, maxE, 0, maxL * 1.05, 'epoch', '訓練 MSE（標準化）');
+            let li = lf.g;
+            Object.keys(hs).forEach((k, i) => { li += poly(hs[k].map((p) => [lf.sx(p[0]).toFixed(1), lf.sy(p[1]).toFixed(1)]), cols[i], 2); });
+            li += Object.keys(hs).map((k, i) => `<g transform="translate(${LM.l + 10 + i * 78} ${LM.t + 10})"><line x2="14" stroke="${cols[i]}" stroke-width="2.5"/><text x="18" y="3" font-size="10" fill="#475569">預測 +${k} 月</text></g>`).join('');
+            $('lossChart').innerHTML = svgWrap(LW, LH, li, '訓練損失曲線');
+
+            // 測試期逐月
+            const tp = f.test_predictions_h1 || [];
+            if (tp.length) {
+                const TW = 380, TH = 240, TM = { l: 50, r: 14, t: 12, b: 38 };
+                const a = tp.map((p) => p.actual).concat(tp.map((p) => p.predicted), tp.map((p) => p.baseline));
+                const tl = Math.min(...a), th = Math.max(...a), tpd = (th - tl) * 0.08;
+                const tf = frame(TW, TH, TM, 0, tp.length - 1, tl - tpd, th + tpd, '測試期月份', 'IPI', []);
+                let ti = tf.g;
+                for (let i = 0; i < tp.length; i += Math.ceil(tp.length / 4)) ti += `<text x="${tf.sx(i)}" y="${TH - TM.b + 14}" text-anchor="middle" font-size="10" fill="#64748b">${esc(tp[i].month || '')}</text>`;
+                ti += poly(tp.map((p, i) => [tf.sx(i).toFixed(1), tf.sy(p.baseline).toFixed(1)]), LINE.b, 1.5, '4 3');
+                ti += poly(tp.map((p, i) => [tf.sx(i).toFixed(1), tf.sy(p.actual).toFixed(1)]), '#0f172a', 2);
+                ti += poly(tp.map((p, i) => [tf.sx(i).toFixed(1), tf.sy(p.predicted).toFixed(1)]), LINE.f, 2);
+                ti += [['實際', '#0f172a'], ['模型', LINE.f], ['延續上月', LINE.b]].map((x, i) => `<g transform="translate(${TM.l + 10 + i * 70} ${TM.t + 10})"><line x2="14" stroke="${x[1]}" stroke-width="2.5"/><text x="18" y="3" font-size="10" fill="#475569">${x[0]}</text></g>`).join('');
+                $('testChart').innerHTML = svgWrap(TW, TH, ti, '測試期逐月檢驗');
+            } else $('testChart').innerHTML = '';
+
+            const th_ = '<th class="border border-slate-200 px-2 py-1">';
+            $('hTable').innerHTML = `<thead><tr class="bg-slate-50 text-slate-500"><th class="border border-slate-200 px-2 py-1 text-left">預測期</th>${th_}訓練 RMSE</th>${th_}測試 RMSE</th>${th_}延續上月 RMSE</th>${th_}相對基準</th>${th_}樣本（訓練/測試）</th>${th_}最終訓練 MSE</th></tr></thead><tbody>` +
+                f.horizons.map((x) => `<tr><td class="border border-slate-200 px-2 py-1 font-semibold">+${x.h} 個月</td>
+                    <td class="border border-slate-200 px-2 py-1 text-right tabular-nums">${fmt(x.train_rmse, 3)}</td>
+                    <td class="border border-slate-200 px-2 py-1 text-right tabular-nums font-semibold">${fmt(x.test_rmse, 3)}</td>
+                    <td class="border border-slate-200 px-2 py-1 text-right tabular-nums">${fmt(x.baseline_rmse, 3)}</td>
+                    <td class="border border-slate-200 px-2 py-1 text-right tabular-nums ${x.beats_baseline ? 'text-emerald-700' : 'text-rose-700'}">${x.beats_baseline ? '勝過 ' : '輸給 '}${fmt(Math.abs(x.improvement_pct), 1)}%</td>
+                    <td class="border border-slate-200 px-2 py-1 text-right tabular-nums">${x.n_train} / ${x.n_test}</td>
+                    <td class="border border-slate-200 px-2 py-1 text-right tabular-nums">${fmt(x.training_loss_final, 4)}</td></tr>`).join('') + '</tbody>';
+            const hp = f.hyperparameters;
+            $('hpNote').textContent = `特徵：${f.feature_names.join('、')}｜隱藏單元 ${hp.hidden_units}、每個網路 ${hp.n_params_per_net} 個參數、epoch ${hp.epochs}、η=${hp.learning_rate}、L2 λ=${hp.weight_decay}｜時間切分：前 ${f.split_index} 個月訓練、後 ${f.n_months - f.split_index} 個月測試｜${f.convergence_epoch == null ? '未達收斂判準' : '約第 ' + f.convergence_epoch + ' epoch 收斂'}`;
+        }
+
+        // ---------- 階層樹 ----------
+        function groupColor(rank, k) {
+            if (k === 1) return TIER_COLOR['未分層'];
+            if (rank === 1) return TIER_COLOR['高風險'];
+            if (rank === k) return TIER_COLOR['低風險'];
+            return rank === 2 ? TIER_COLOR['中風險'] : EXTRA[(rank - 3) % EXTRA.length];
+        }
+        function renderDendro(d) {
+            const h = d.hierarchy, g = d.dendrogram;
+            show('dgSection', true);
+            statusBadge($('hBadge'), h, 'skill_24 ');
+            statusBadge($('dBadge'), g, 'skill_25 ');
+            $('dgAnswer').textContent = (g.found ? g.answer_text : (g.answer_text || h.answer_text)) || '';
+            warnList($('dgWarn'), (h.warnings || []).concat(g.warnings || []));
+            if (!h.found) {
+                ['dK', 'dCcc', 'dSil', 'dWeeks'].forEach((i) => { $(i).textContent = '--'; });
+                ['dThr', 'dCap'].forEach((i) => { $(i).textContent = ''; });
+                $('dgChart').innerHTML = ''; $('riskSummary').textContent = ''; $('groupCards').innerHTML = ''; show('ganttSection', false);
+                return;
+            }
+            lastSuggest = h.suggested_threshold;
+            $('thrRng').max = (Math.ceil(h.max_merge_height * 20) / 20).toFixed(2);
+            $('dCcc').textContent = fmt(h.cophenetic_correlation, 3);
+            if (!g.found) {
+                ['dK', 'dSil', 'dWeeks'].forEach((i) => { $(i).textContent = '--'; });
+                $('dThr').textContent = ''; $('dCap').textContent = '';
+                $('riskSummary').textContent = ''; $('groupCards').innerHTML = ''; show('ganttSection', false);
+                drawTree(h, null, null);
+                return;
+            }
+            $('dK').textContent = g.clusters_count;
+            $('dThr').textContent = `門檻 ${fmt(g.threshold_used, 3)}${g.threshold_auto ? '（自動建議）' : ''}`;
+            $('dSil').textContent = isNum(g.silhouette) ? fmt(g.silhouette, 3) : '--';
+            $('dWeeks').textContent = g.weeks_total;
+            $('dCap').textContent = `每週 ${g.capacity_per_week} 台，自第 ${g.start_week} 週起`;
+            drawTree(h, g, g.threshold_used);
+            $('riskSummary').innerHTML = '🧾 <strong>風險摘要：</strong>' + esc(g.risk_summary || '');
+            $('groupCards').innerHTML = g.groups.map((x) => {
+                const col = groupColor(x.group, g.clusters_count);
+                const zones = Object.entries(x.zones || {}).map(([z, c]) => `${esc(z)} ${c}`).join('、');
+                const mi = x.mean_indicators || {};
+                return `<div class="rounded-lg border p-3 text-xs space-y-1.5" style="border-color:${col}">
+                    <div class="flex items-center justify-between"><span class="font-bold" style="color:${col}">● 群 ${x.group}｜${esc(x.tier)}</span><span class="text-slate-500">${x.size} 台</span></div>
+                    <div class="text-slate-500">風險分數 ${fmt(x.risk_score, 2)}（z 平均）｜第 ${x.action_week}–${x.end_week} 週保養</div>
+                    ${zones ? `<div class="text-slate-500">區域：${zones}</div>` : ''}
+                    ${Object.keys(mi).length ? `<div class="text-slate-500">平均：${isNum(mi.failure_rate) ? '故障率 ' + mi.failure_rate : ''} ${isNum(mi.mtbf_hours) ? ' MTBF ' + mi.mtbf_hours : ''} ${isNum(mi.load_pct) ? ' 負載 ' + mi.load_pct + '%' : ''}</div>` : ''}
+                    <div class="text-slate-700 leading-relaxed">${x.members.map(esc).join('、')}</div></div>`;
+            }).join('');
+            drawGantt(g);
+        }
+        function drawTree(h, g, thr) {
+            const ids = h.equipment_ids, n = ids.length, mh = h.merge_history, order = h.leaf_order;
+            const pos = {}; order.forEach((leaf, i) => { pos[leaf] = i; });
+            const ht = {}; for (let i = 0; i < n; i++) ht[i] = 0;
+            const lab = (i) => (g ? g.labels[i] : 0), k = g ? g.clusters_count : 1;
+            const first = {}; for (let i = 0; i < n; i++) first[i] = i;      // 子樹的任一葉
+            mh.forEach(([a, b, dist], s) => { pos[n + s] = (pos[a] + pos[b]) / 2; ht[n + s] = dist; first[n + s] = first[a]; });
+            const maxH = h.max_merge_height;
+            const colW = Math.max(26, Math.min(44, 720 / n)), W = Math.max(520, n * colW + 80), H = 380, M = { l: 48, r: 16, t: 14, b: 96 };
+            const sx = (p) => M.l + 12 + p * (W - M.l - M.r - 24) / Math.max(1, n - 1);
+            const sy = (v) => H - M.b - (v / (maxH * 1.05)) * (H - M.t - M.b);
+            let inner = '';
+            ticks(0, maxH * 1.05).forEach((t) => { inner += `<line x1="${M.l}" x2="${W - M.r}" y1="${sy(t)}" y2="${sy(t)}" stroke="#e2e8f0"/><text x="${M.l - 6}" y="${sy(t) + 3}" text-anchor="end" font-size="10" fill="#64748b">${+t.toFixed(2)}</text>`; });
+            inner += `<text transform="translate(12 ${(M.t + H - M.b) / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="#475569">合併距離</text>`;
+            const colorOf = (node, d) => (thr != null && d <= thr + 1e-9 ? groupColor(lab(first[node]), k) : '#94a3b8');
+            mh.forEach(([a, b, dist], s) => {
+                const c = colorOf(n + s, dist), node = n + s;
+                [a, b].forEach((ch) => {
+                    inner += `<path d="M${sx(pos[ch])},${sy(ht[ch])} V${sy(dist)}" stroke="${thr != null && dist <= thr + 1e-9 ? c : '#94a3b8'}" stroke-width="2" fill="none"/>`;
+                });
+                inner += `<path d="M${sx(pos[a])},${sy(dist)} H${sx(pos[b])}" stroke="${c}" stroke-width="2" fill="none"/>`;
+            });
+            order.forEach((leaf) => {
+                const c = g ? groupColor(lab(leaf), k) : '#475569';
+                inner += `<circle cx="${sx(pos[leaf])}" cy="${sy(0)}" r="3.5" fill="${c}"/>`;
+                inner += `<text transform="translate(${sx(pos[leaf]) + 3} ${sy(0) + 10}) rotate(60)" font-size="10" fill="${c}">${esc(ids[leaf])}</text>`;
+            });
+            if (thr != null) inner += `<line x1="${M.l}" x2="${W - M.r}" y1="${sy(thr)}" y2="${sy(thr)}" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${W - M.r - 2}" y="${sy(thr) - 4}" text-anchor="end" font-size="10" font-weight="bold" fill="#7c3aed">門檻 ${thr.toFixed(2)}</text>`;
+            $('dgChart').innerHTML = `<div style="min-width:${W}px">${svgWrap(W, H, inner, '設備風險階層樹')}</div>`;
+        }
+
+        // ---------- 甘特圖 ----------
+        function drawGantt(g) {
+            show('ganttSection', true);
+            const rows = [];
+            g.preventive_schedule.forEach((s) => s.machines.forEach((m) => rows.push({ id: m.equipment_id, week: m.week, group: s.group, tier: s.tier })));
+            const w0 = g.start_week, w1 = w0 + g.weeks_total - 1, nW = g.weeks_total;
+            const RH = 22, M = { l: 130, r: 16, t: 28, b: 8 }, CW = Math.max(46, Math.min(80, 640 / nW));
+            const W = M.l + nW * CW + M.r, H = M.t + rows.length * RH + M.b + g.preventive_schedule.length * 6;
+            let inner = '';
+            for (let w = w0; w <= w1; w++) {
+                const x = M.l + (w - w0) * CW;
+                inner += `<line x1="${x}" x2="${x}" y1="${M.t - 6}" y2="${H - M.b}" stroke="#e2e8f0"/><text x="${x + CW / 2}" y="${M.t - 12}" text-anchor="middle" font-size="10" fill="#64748b">第 ${w} 週</text>`;
+            }
+            inner += `<line x1="${M.l + nW * CW}" x2="${M.l + nW * CW}" y1="${M.t - 6}" y2="${H - M.b}" stroke="#e2e8f0"/>`;
+            let y = M.t, lastGroup = null;
+            rows.forEach((r) => {
+                if (lastGroup !== null && r.group !== lastGroup) y += 6;
+                lastGroup = r.group;
+                const col = groupColor(r.group, g.clusters_count), x = M.l + (r.week - w0) * CW;
+                inner += `<text x="${M.l - 8}" y="${y + RH / 2 + 3}" text-anchor="end" font-size="10.5" fill="#334155">${esc(r.id)}</text>`;
+                inner += `<rect x="${x + 2}" y="${y + 3}" width="${CW - 4}" height="${RH - 6}" rx="3" fill="${col}"/>`;
+                inner += `<text x="${x + CW / 2}" y="${y + RH / 2 + 3}" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="bold">群${r.group}</text>`;
+                y += RH;
+            });
+            const legend = g.groups.map((x) => `<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm" style="background:${groupColor(x.group, g.clusters_count)}"></span>群 ${x.group}（${esc(x.tier)}，第 ${x.action_week}–${x.end_week} 週）</span>`).join('');
+            $('ganttChart').innerHTML = `<div style="min-width:${W}px">${svgWrap(W, H, inner, '預防維護甘特圖')}</div><div class="flex flex-wrap gap-4 text-[11px] text-slate-500 mt-2">${legend}</div>`;
+        }
+
+        // ---------- 步驟日誌 ----------
+        function renderSteps(steps) {
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            let last = '';
+            box.innerHTML = steps.map((s) => {
+                const head = s.skill_name !== last ? `<div class="text-xs font-bold text-blue-800 pt-1">▸ ${esc(s.skill_name)}</div>` : '';
+                last = s.skill_name;
+                return head + `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`;
+            }).join('');
+        }
+
+        // ---------- 主流程 ----------
+        function readBody(withForecast) {
+            const body = {
+                features: [...document.querySelectorAll('.ft:checked')].map((e) => e.value),
+                indicators: [...document.querySelectorAll('.ind:checked')].map((e) => e.value),
+                epochs: parseInt($('epochs').value, 10), learning_rate: parseFloat($('lr').value), hidden_units: parseInt($('hidden').value, 10),
+                linkage: $('linkage').value, capacity_per_week: parseInt($('capacity').value, 10),
+                distance_threshold: $('thrNum').value === '' ? null : parseFloat($('thrNum').value),
+                forecast_enabled: withForecast,
+            };
+            return body;
+        }
+        function fail(msg, steps) {
+            show('guardCard', true);
+            $('guardMessage').textContent = msg;
+            $('guardList').innerHTML = '';
+            if (steps) renderSteps(steps);
+        }
+        function render(d, full) {
+            lastData = d;
+            $('ipiSourceLabel').textContent = `${d.ipi.source}（${d.ipi.months.length} 個月）`;
+            $('equipSourceLabel').textContent = `${d.equipment.source}（${d.equipment.rows.length} 台）`;
+            const blocked = [];
+            [['skill_23 MLP 預測', d.forecast || lastForecast], ['skill_24 建樹', d.hierarchy], ['skill_25 切樹與排程', d.dendrogram]].forEach(([t, r]) => { if (r && r.found === false) blocked.push({ t, r }); });
+            show('guardCard', blocked.length > 0);
+            if (blocked.length) {
+                $('guardMessage').textContent = '以下計算被安全檢核攔截，其餘結果仍照常顯示。';
+                $('guardList').innerHTML = blocked.map((b) => `<li><strong>${esc(b.t)}：</strong>${esc(b.r.answer_text || '無法完成計算')}</li>`).join('');
+            }
+            if (full) { renderForecast(d); lastForecast = d.forecast; }
+            renderDendro(d);
+            if (full) lastForecastSteps = (d.steps || []).filter((s) => s.skill_name === 'skill_23_ipi_mlp_forecast');
+            renderSteps(full ? (d.steps || []) : lastForecastSteps.concat(d.steps || []));
+        }
+        async function call(withForecast) {
+            const body = readBody(withForecast);
+            if (!body.features.length || !body.indicators.length) { fail('請至少選擇一個預測變數與一個設備風險指標。'); return; }
+            if (busy) return;
+            busy = true;
+            $('overlayText').textContent = withForecast ? '正在訓練 MLP、建立階層樹並排程，請稍候（約 3–5 秒）...' : '正在重新切割階層樹並排程...';
+            show('loadingOverlay', true);
+            try {
+                const res = await fetch('/api/index-forecast', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                const d = await res.json();
+                if (!res.ok || d.status === 'error') {
+                    fail(d.answer_text || '伺服器發生錯誤', d.steps || []);
+                    ['fcSection', 'dgSection', 'ganttSection'].forEach((i) => show(i, false));
+                } else render(d, withForecast || !lastForecastSteps.length);
+            } catch (err) {
+                fail('無法連線到後端：' + err.message);
+            } finally {
+                busy = false;
+                show('loadingOverlay', false);
+            }
+        }
+        function scheduleRecut() {
+            if (!lastData) return;                     // 還沒執行過完整流程：等使用者按主按鈕
+            clearTimeout(recutTimer);
+            recutTimer = setTimeout(() => call(false), 400);
+        }
+
+        $('runBtn').addEventListener('click', () => call(true));
+        $('thrRng').addEventListener('input', () => { $('thrNum').value = $('thrRng').value; scheduleRecut(); });
+        $('thrNum').addEventListener('input', () => { if ($('thrNum').value !== '') $('thrRng').value = $('thrNum').value; scheduleRecut(); });
+        ['linkage', 'capacity'].forEach((id) => $(id).addEventListener('change', scheduleRecut));
+        document.querySelectorAll('.ind').forEach((e) => e.addEventListener('change', scheduleRecut));
+        $('sugBtn').addEventListener('click', () => {
+            if (lastSuggest == null) { fail('請先按「生成指數預測與預防維護甘特圖」產生階層樹，才有建議門檻'); return; }
+            $('thrNum').value = lastSuggest.toFixed(2); $('thrRng').value = lastSuggest; scheduleRecut();
+        });
+    </script>
+</body>
+</html>

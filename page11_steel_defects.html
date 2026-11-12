@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>11. 鋼板表面缺陷分類與特徵評估頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xl border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm font-semibold tracking-wide">正在以 CART 分類、剪枝並導出 IF-THEN 規則，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 頂部導覽 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">鋼板表面缺陷分類與特徵評估</h1>
+                    <p class="text-xs text-slate-500">系統頁面：11. 鋼板表面缺陷分類與特徵評估頁 (/quality/steel-defects) | US-10 / US-11</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">👤 角色：品質與製程工程師</span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">🤖 MCP Tools：skill_17 / 18 / 19</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6 min-w-0">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>缺陷資料來源：</strong><span id="dataSourceLabel">尚未執行分類</span></span>
+                    <span>🧮 <strong>演算法：</strong>CART 決策樹 ＋ 代價複雜度剪枝 ＋ IF-THEN 規則</span>
+                </div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>未放入真實資料 (data/steel_defects.csv) 時，使用依假想分佈合成的示範缺陷資料，結果不代表真實鋼板缺陷。α 由「驗證集」建議、準確率由「從未參與選擇的測試集」報告（和規格寫的「以測試集選 α」不同，避免高估剪枝效果）；測試集約 120 筆，差距小於 2 個百分點不具統計意義。
+                </div>
+            </section>
+
+            <!-- 輸入面板 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-bold text-slate-500 mr-1">快速範例（各類別分佈中心）：</span>
+                    <span id="presetBtns" class="flex flex-wrap gap-2"></span>
+                </div>
+                <div id="featureFields" class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5"></div>
+
+                <div class="space-y-1.5 max-w-xl">
+                    <div class="flex items-center justify-between gap-2">
+                        <label for="alphaNum" class="text-sm font-semibold text-slate-800">剪枝懲罰係數 α <span class="font-normal text-slate-500">（R<sub>α</sub>(T)=R(T)+α|T|）</span></label>
+                        <input id="alphaNum" type="number" min="0" max="0.1" step="0.001" value="0.01" class="w-24 px-2 py-1.5 border border-slate-300 rounded-md text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <input id="alphaRng" type="range" min="0" max="0.1" step="0.001" value="0.01" aria-label="剪枝係數 α" class="w-full accent-purple-600 cursor-pointer">
+                    <div class="text-[11px] text-slate-400">α 越大樹越小；0 幾乎不剪。範圍 0–0.1 可調（程式允許 0–1，α 超過約 0.15 樹會被剪光）。</div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 pt-1">
+                    <button id="runBtn" type="button" class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-medium text-sm rounded-lg transition-colors shadow-xs cursor-pointer">執行缺陷分類與白盒規則推理</button>
+                    <button id="autoBtn" type="button" class="px-4 py-2.5 bg-white hover:bg-purple-50 text-purple-700 font-medium text-sm rounded-lg border border-purple-300 transition-colors cursor-pointer">用驗證集建議的 α 重算</button>
+                    <button id="resetBtn" type="button" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-lg border border-slate-200 transition-colors cursor-pointer">還原預設值</button>
+                </div>
+            </section>
+
+            <!-- Guardrail 卡片 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">⚠️ 安全檢核提示（Guardrail 防呆觸發）</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- SK-17 分類結果 -->
+            <section id="predSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🔎 缺陷分類結果 <span class="text-[11px] font-normal text-slate-400">#SK-17 / #SK-19</span></span>
+                    <span id="predBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                </div>
+                <p id="predAnswer" class="text-sm text-slate-700"></p>
+                <ul id="predWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="rounded-lg border border-slate-200 p-3">
+                        <div class="text-[11px] text-slate-500">defect_class（完整樹）</div>
+                        <div id="fullClass" class="text-2xl font-bold"></div>
+                        <div id="fullSub" class="text-[11px] text-slate-400"></div>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 p-3">
+                        <div class="text-[11px] text-slate-500">剪枝後的樹判定</div>
+                        <div id="prunedClass" class="text-2xl font-bold"></div>
+                        <div id="prunedSub" class="text-[11px] text-slate-400"></div>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 p-3 space-y-1.5">
+                        <div class="text-[11px] text-slate-500">所在葉節點的類別比例（訓練樣本）</div>
+                        <div id="probBars" class="space-y-1"></div>
+                    </div>
+                </div>
+                <div class="rounded-lg border-l-4 border-purple-500 bg-purple-50 p-3 space-y-1">
+                    <div class="text-[11px] font-bold text-purple-800">白盒 IF-THEN 推理路徑（剪枝後，rule_path）</div>
+                    <div id="rulePath" class="text-sm font-mono text-slate-800 break-words"></div>
+                </div>
+                <div>
+                    <div class="text-xs font-bold text-slate-600 mb-1.5">完整樹的決策路徑</div>
+                    <ol id="pathList" class="text-xs text-slate-700 space-y-0.5 list-decimal pl-5"></ol>
+                </div>
+            </section>
+
+            <!-- 樹狀圖 -->
+            <section id="treeSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🌳 剪枝後的決策樹</span>
+                    <span class="text-xs text-slate-500">粗黑線＝本次缺陷走過的路徑；左支＝條件成立（≤）、右支＝不成立（&gt;）</span>
+                </div>
+                <div id="treeNote" class="text-xs text-amber-700"></div>
+                <div id="treeWrap" class="overflow-x-auto rounded-lg border border-slate-100 bg-slate-50 p-2"></div>
+            </section>
+
+            <!-- 剪枝評估 -->
+            <section id="pruneSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">✂️ 剪枝前後比較 <span class="text-[11px] font-normal text-slate-400">#SK-19</span></span>
+                    <span id="pruneBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                </div>
+                <p id="pruneAnswer" class="text-sm text-slate-700"></p>
+                <ul id="pruneWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">測試集準確率（剪枝前）</div><div id="accBefore" class="text-xl font-bold tabular-nums"></div><div id="leavesBefore" class="text-[11px] text-slate-400"></div></div>
+                    <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">測試集準確率（剪枝後）</div><div id="accAfter" class="text-xl font-bold tabular-nums"></div><div id="leavesAfter" class="text-[11px] text-slate-400"></div></div>
+                    <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">本次使用的 α</div><div id="alphaUsed" class="text-xl font-bold tabular-nums"></div><div id="accValAfter" class="text-[11px] text-slate-400"></div></div>
+                    <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">驗證集建議的 α</div><div id="alphaRec" class="text-xl font-bold tabular-nums text-purple-700"></div><div class="text-[11px] text-slate-400">驗證準確率最高（同分取較小的樹）</div></div>
+                </div>
+                <div>
+                    <div class="text-xs font-bold text-slate-600 mb-1">剪枝路徑：葉節點數 vs. 準確率（訓練／驗證）</div>
+                    <div id="curveChart"></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div><div class="text-xs font-bold text-slate-600 mb-1.5">混淆矩陣：剪枝前（測試集）</div><div class="overflow-x-auto"><table id="cmBefore" class="text-xs border-collapse"></table></div></div>
+                    <div><div class="text-xs font-bold text-slate-600 mb-1.5">混淆矩陣：剪枝後（測試集）</div><div class="overflow-x-auto"><table id="cmAfter" class="text-xs border-collapse"></table></div></div>
+                </div>
+                <div class="text-[11px] text-slate-400">列＝真實類別、欄＝預測類別；對角線為預測正確的筆數。</div>
+            </section>
+
+            <!-- SK-18 特徵影響力 -->
+            <section id="impSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">📊 幾何與光學特徵影響力（Gini 下降量） <span class="text-[11px] font-normal text-slate-400">#SK-18</span></span>
+                    <span class="text-xs text-slate-500">描述模型如何使用特徵，不代表物理因果</span>
+                </div>
+                <p id="impAnswer" class="text-sm text-slate-700"></p>
+                <ul id="impWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                <div id="impBars" class="space-y-3"></div>
+                <div class="flex flex-wrap gap-4 text-[11px] text-slate-500">
+                    <span><span class="inline-block w-3 h-2 rounded-sm bg-sky-600 align-middle"></span> 吉尼影響力（總和為 1）</span>
+                    <span><span class="inline-block w-3 h-2 rounded-sm bg-slate-400 align-middle"></span> 測試集排列重要度（打亂後準確率下降，交叉檢查用）</span>
+                </div>
+            </section>
+
+            <!-- 規則卡 -->
+            <section id="rulesSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">📜 全部 IF-THEN 規則（剪枝後）</span>
+                    <span id="rulesNote" class="text-xs text-slate-500"></span>
+                </div>
+                <div id="ruleCards" class="grid grid-cols-1 gap-2"></div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_17（CART 分類）→ skill_18（特徵影響力）→ skill_19（剪枝與規則）</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未執行分類...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const FIELDS = [
+            { key: 'area',         label: '缺陷面積',   short: '面積',   unit: 'mm²', min: 5,  max: 450, step: 1,    def: 150, hint: '示範資料約 20–400' },
+            { key: 'aspect_ratio', label: '長寬比',     short: '長寬比', unit: '',    min: 1,  max: 10,  step: 0.1,  def: 4.2, hint: '長邊 ÷ 短邊，≥ 1' },
+            { key: 'contrast',     label: '灰階對比度', short: '對比度', unit: '',    min: 0,  max: 255, step: 1,    def: 85,  hint: '0–255' },
+        ];
+        const PRESETS = {
+            Scratch: ['劃痕', 145, 4.2, 88], Crack: ['裂紋', 80, 6.0, 132], Inclusion: ['夾雜', 52, 1.5, 152], Scale: ['氧化皮', 245, 2.0, 68],
+        };
+        const CLASS_COLORS = { Scratch: '#0284c7', Crack: '#e11d48', Inclusion: '#d97706', Scale: '#059669' };
+        const FALLBACK = ['#7c3aed', '#0d9488', '#be185d', '#4d7c0f', '#475569'];
+        const colorOf = (name, i = 0) => CLASS_COLORS[name] || FALLBACK[i % FALLBACK.length];
+        const FEATURE_SHORT = { area: '面積', aspect_ratio: '長寬比', contrast: '對比度' };
+        const BAR_COLORS = { area: '#0284c7', aspect_ratio: '#7c3aed', contrast: '#0d9488' };
+        let CLASSES = [], LABELS = [];
+        let lastAlphaRec = null;
+
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const isNum = (n) => typeof n === 'number' && isFinite(n);
+        const fmt = (n, d = 1) => isNum(n) ? n.toFixed(d) : '--';
+        const pct = (n, d = 1) => isNum(n) ? (n * 100).toFixed(d) + '%' : '--';
+        const sgn = (n, d = 3) => isNum(n) ? (n >= 0 ? '+' : '') + n.toFixed(d) : '--';
+        const show = (id, on) => $(id).classList.toggle('hidden', !on);
+        const clsName = (c) => { const i = CLASSES.indexOf(c); return i >= 0 && LABELS[i] !== c ? `${c}（${LABELS[i]}）` : c; };
+
+        function buildFields() {
+            $('featureFields').innerHTML = FIELDS.map((f) => `
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <label for="num_${f.key}" class="text-sm font-semibold text-slate-800">${f.label}</label>
+                        <div class="flex items-center gap-1.5">
+                            <input id="num_${f.key}" type="number" min="${f.min}" max="${f.max}" step="${f.step}"
+                                class="w-20 px-2 py-1.5 border border-slate-300 rounded-md text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                            <span class="text-xs text-slate-500 w-8">${f.unit}</span>
+                        </div>
+                    </div>
+                    <input id="rng_${f.key}" type="range" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}" class="w-full accent-sky-600 cursor-pointer">
+                    <div class="text-[11px] text-slate-400">${f.hint}</div>
+                </div>`).join('');
+            FIELDS.forEach((f) => {
+                const num = $('num_' + f.key), rng = $('rng_' + f.key);
+                rng.addEventListener('input', () => { num.value = rng.value; });
+                num.addEventListener('input', () => { if (num.value !== '') rng.value = num.value; });
+            });
+            $('alphaRng').addEventListener('input', () => { $('alphaNum').value = $('alphaRng').value; });
+            $('alphaNum').addEventListener('input', () => { if ($('alphaNum').value !== '') $('alphaRng').value = $('alphaNum').value; });
+            $('presetBtns').innerHTML = Object.entries(PRESETS).map(([k, p]) =>
+                `<button type="button" data-k="${k}" class="px-3 py-1.5 text-xs font-medium rounded-lg border bg-white hover:bg-slate-50 cursor-pointer" style="border-color:${colorOf(k)};color:${colorOf(k)}">${k} ${p[0]}</button>`).join('');
+            $('presetBtns').addEventListener('click', (e) => {
+                const k = e.target.dataset && e.target.dataset.k; if (!k) return;
+                setValues(PRESETS[k].slice(1));
+            });
+        }
+        function setValues(vals) { FIELDS.forEach((f, i) => { $('num_' + f.key).value = vals[i]; $('rng_' + f.key).value = vals[i]; }); }
+        function resetAll() { setValues(FIELDS.map((f) => f.def)); $('alphaNum').value = 0.01; $('alphaRng').value = 0.01; }
+
+        function readValues(auto) {
+            const out = { auto_alpha: !!auto };
+            for (const f of FIELDS) {
+                const raw = $('num_' + f.key).value.trim();
+                if (raw === '' || !isFinite(Number(raw))) { alert(`請輸入有效的「${f.label}」數值`); $('num_' + f.key).focus(); return null; }
+                out[f.key] = Number(raw);
+            }
+            const a = $('alphaNum').value.trim();
+            if (a === '' || !isFinite(Number(a)) || Number(a) < 0) { alert('α 需為大於等於 0 的數值'); $('alphaNum').focus(); return null; }
+            out.alpha = Number(a);
+            return out;
+        }
+
+        async function run(auto) {
+            const body = readValues(auto);
+            if (!body) return;
+            $('algorithmStepsContainer').innerHTML = '';
+            $('loadingOverlay').classList.remove('hidden');
+            try {
+                const res = await fetch('/api/steel-defects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.answer_text || '伺服器計算失敗 (HTTP ' + res.status + ')');
+                render(data);
+            } catch (err) {
+                console.error(err);
+                alert('無法完成分類：' + err.message + '\n請確認 app.py 是否正在運行。');
+            } finally {
+                $('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        function render(data) {
+            const pred = data.prediction || {}, imp = data.importance || {}, pr = data.pruning || {};
+            const src = pred.data_source || imp.data_source || pr.data_source;
+            if (src) $('dataSourceLabel').textContent = src.startsWith('synthetic') ? '示範資料 (' + src + ')' : src;
+            if (pred.class_names) { CLASSES = pred.class_names; LABELS = pred.class_labels; }
+            else if (pr.class_names) { CLASSES = pr.class_names; LABELS = pr.class_labels; }
+
+            const problems = [];
+            if (!pred.found) problems.push({ title: '缺陷分類 (skill_17)', r: pred });
+            if (!imp.found) problems.push({ title: '特徵影響力 (skill_18)', r: imp });
+            if (!pr.found) problems.push({ title: '剪枝與規則 (skill_19)', r: pr });
+            show('guardCard', problems.length > 0);
+            if (problems.length) {
+                $('guardMessage').textContent = '以下計算被安全檢核攔截，其餘結果仍照常顯示。';
+                $('guardList').innerHTML = problems.map((p) => `<li><strong>${esc(p.title)}：</strong>${esc(p.r.answer_text || '無法完成計算')}</li>`).join('');
+            }
+            show('predSection', !!pred.found);
+            if (pred.found) renderPrediction(pred, pr);
+            show('treeSection', !!pr.found);
+            show('pruneSection', !!pr.found);
+            show('rulesSection', !!pr.found);
+            if (pr.found) { drawTree(pr.tree); renderPrune(pr); renderRules(pr); lastAlphaRec = pr.alpha_recommended; }
+            show('impSection', !!imp.found);
+            if (imp.found) renderImportance(imp);
+            renderSteps(data.steps || []);
+        }
+
+        function badge(el, text, color) {
+            el.textContent = text;
+            el.className = 'px-3 py-1 font-semibold text-xs rounded-full border';
+            el.style.color = color; el.style.borderColor = color; el.style.background = color + '14';
+        }
+
+        function renderPrediction(p, pr) {
+            const c = p.defect_class;
+            badge($('predBadge'), clsName(c), colorOf(c, CLASSES.indexOf(c)));
+            $('predAnswer').textContent = p.answer_text || '';
+            $('predWarn').innerHTML = (p.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+            $('fullClass').textContent = c; $('fullClass').style.color = colorOf(c, CLASSES.indexOf(c));
+            $('fullSub').textContent = `${p.defect_class_label}｜葉節點 ${p.leaf_samples} 筆、純度 ${pct(p.leaf_purity, 0)}｜完整樹 ${p.n_leaves} 葉`;
+            const pc = pr && pr.found ? pr.pruned_defect_class : null;
+            $('prunedClass').textContent = pc || '—';
+            $('prunedClass').style.color = pc ? colorOf(pc, CLASSES.indexOf(pc)) : '#94a3b8';
+            $('prunedSub').textContent = !pc ? '剪枝結果不可用' : (pc === c ? '與完整樹一致' : '⚠ 與完整樹不同：這個缺陷落在剪枝後被合併的區域，信心較低');
+            $('probBars').innerHTML = Object.entries(p.class_probabilities).map(([k, v], i) => `
+                <div class="flex items-center gap-2 text-[11px]"><span class="w-16 text-slate-600">${esc(k)}</span>
+                <div class="h-2 flex-1 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${v * 100}%;background:${colorOf(k, i)}"></div></div>
+                <span class="w-9 text-right tabular-nums text-slate-700">${pct(v, 0)}</span></div>`).join('');
+            $('rulePath').textContent = pr && pr.found && pr.rule_path ? pr.rule_path : '（剪枝規則不可用）';
+            $('pathList').innerHTML = (p.decision_path || []).map((d) =>
+                `<li>${esc(d.label)} = ${fmt(d.value, 2)} ${d.op === '<=' ? '≤' : '&gt;'} ${fmt(d.threshold, 2)}</li>`).join('') || '<li>根節點即葉節點</li>';
+        }
+
+        /* ---------- 樹狀圖 ---------- */
+        function drawTree(root) {
+            const NW = 112, NH = 46, XG = 124, YG = 86, PAD = 14;
+            let leafCount = 0;
+            (function count(n) { if (n.leaf) leafCount++; else { count(n.left); count(n.right); } })(root);
+            if (leafCount > 30) {
+                $('treeNote').textContent = `剪枝後仍有 ${leafCount} 個葉節點，圖會過寬。請調高 α 後再看樹狀圖（規則清單不受影響）。`;
+                $('treeWrap').innerHTML = ''; return;
+            }
+            $('treeNote').textContent = '';
+            let li = 0, maxD = 0;
+            (function layout(n, d) {
+                n.d = d; maxD = Math.max(maxD, d);
+                if (n.leaf) { n.x = li++; } else { layout(n.left, d + 1); layout(n.right, d + 1); n.x = (n.left.x + n.right.x) / 2; }
+            })(root, 0);
+            const W = PAD * 2 + (leafCount - 1) * XG + NW, H = PAD * 2 + maxD * YG + NH;
+            const cx = (n) => PAD + NW / 2 + n.x * XG, cy = (n) => PAD + n.d * YG;
+            let edges = '', nodes = '';
+            (function draw(n) {
+                if (!n.leaf) {
+                    [['left', '≤'], ['right', '>']].forEach(([side, sym]) => {
+                        const c = n[side], on = c.on_path;
+                        const x1 = cx(n), y1 = cy(n) + NH, x2 = cx(c), y2 = cy(c);
+                        edges += `<path d="M${x1} ${y1} C${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}" fill="none" stroke="${on ? '#0f172a' : '#cbd5e1'}" stroke-width="${on ? 3 : 1.5}"/>`;
+                        edges += `<text x="${(x1 + x2) / 2 + (side === 'left' ? -8 : 8)}" y="${(y1 + y2) / 2 - 2}" font-size="10" fill="#64748b" text-anchor="middle">${sym}</text>`;
+                    });
+                    draw(n.left); draw(n.right);
+                }
+                const x = cx(n) - NW / 2, y = cy(n), on = n.on_path;
+                if (n.leaf) {
+                    const col = colorOf(n.majority, CLASSES.indexOf(n.majority));
+                    nodes += `<g><rect x="${x}" y="${y}" width="${NW}" height="${NH}" rx="8" fill="${col}1f" stroke="${on ? '#0f172a' : col}" stroke-width="${on ? 3 : 1.5}"/>
+                        <text x="${cx(n)}" y="${y + 19}" font-size="12" font-weight="bold" fill="${col}" text-anchor="middle">${esc(n.majority)}</text>
+                        <text x="${cx(n)}" y="${y + 35}" font-size="10" fill="#475569" text-anchor="middle">n=${n.n}・純度 ${(n.purity * 100).toFixed(0)}%</text>
+                        <title>${esc(Object.entries(n.counts).filter(([, v]) => v).map(([k, v]) => k + ' ' + v).join('、'))}</title></g>`;
+                } else {
+                    nodes += `<g><rect x="${x}" y="${y}" width="${NW}" height="${NH}" rx="8" fill="#fff" stroke="${on ? '#0f172a' : '#94a3b8'}" stroke-width="${on ? 3 : 1.5}"/>
+                        <text x="${cx(n)}" y="${y + 19}" font-size="11" font-weight="bold" fill="#0f172a" text-anchor="middle">${esc(FEATURE_SHORT[n.feature] || n.feature)} ≤ ${n.threshold}</text>
+                        <text x="${cx(n)}" y="${y + 35}" font-size="10" fill="#64748b" text-anchor="middle">n=${n.n}</text></g>`;
+                }
+            })(root);
+            $('treeWrap').innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="剪枝後的決策樹">${edges}${nodes}</svg>`;
+        }
+
+        /* ---------- 剪枝評估 ---------- */
+        function renderPrune(pr) {
+            const diff = pr.accuracy_after - pr.accuracy_before;
+            badge($('pruneBadge'), pr.pruning_status + `（${diff >= 0 ? '+' : ''}${(diff * 100).toFixed(1)} 個百分點）`, diff < -0.05 ? '#e11d48' : '#059669');
+            $('pruneAnswer').textContent = pr.answer_text || '';
+            $('pruneWarn').innerHTML = (pr.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+            $('accBefore').textContent = pct(pr.accuracy_before); $('leavesBefore').textContent = `${pr.leaves_before} 個葉節點`;
+            $('accAfter').textContent = pct(pr.accuracy_after); $('leavesAfter').textContent = `${pr.leaves_after} 個葉節點`;
+            $('alphaUsed').textContent = pr.alpha_used.toFixed(4); $('accValAfter').textContent = `驗證 ${pct(pr.accuracy_validation_after)}｜訓練 ${pct(pr.accuracy_train_after)}`;
+            $('alphaRec').textContent = pr.alpha_recommended.toFixed(4);
+            drawCurve(pr);
+            cmTable('cmBefore', pr.confusion_matrix_before, pr);
+            cmTable('cmAfter', pr.confusion_matrix_after, pr);
+        }
+
+        function drawCurve(pr) {
+            const pts = pr.alpha_curve.filter((p) => p.leaves >= 1).slice().sort((a, b) => b.leaves - a.leaves);
+            const W = 640, H = 280, L = 52, R = 16, T = 14, B = 52;
+            const maxL = Math.max(...pts.map((p) => p.leaves));
+            const sx = (l) => L + (maxL - l) / Math.max(1, maxL - 1) * (W - L - R);
+            const sy = (v) => H - B - v * (H - T - B);
+            let s = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="剪枝路徑的葉節點數與準確率">`;
+            for (let k = 0; k <= 5; k++) { const v = k / 5; s += `<line x1="${L}" y1="${sy(v)}" x2="${W - R}" y2="${sy(v)}" stroke="#e2e8f0"/><text x="${L - 6}" y="${sy(v) + 3}" font-size="10" fill="#64748b" text-anchor="end">${(v * 100).toFixed(0)}%</text>`; }
+            pts.forEach((p) => { s += `<text x="${sx(p.leaves)}" y="${H - B + 14}" font-size="9" fill="#64748b" text-anchor="middle">${p.leaves}</text>`; });
+            s += `<text x="${(L + W - R) / 2}" y="${H - 6}" font-size="11" fill="#475569" text-anchor="middle">葉節點數（愈往右愈簡單）</text>`;
+            s += `<text transform="translate(13 ${(T + H - B) / 2}) rotate(-90)" font-size="11" fill="#475569" text-anchor="middle">準確率</text>`;
+            const line = (key, col, dash) => `<polyline fill="none" stroke="${col}" stroke-width="2" ${dash ? 'stroke-dasharray="5 3"' : ''} points="${pts.map((p) => `${sx(p.leaves).toFixed(1)},${sy(p[key]).toFixed(1)}`).join(' ')}"/>`;
+            s += line('train_accuracy', '#94a3b8', true) + line('val_accuracy', '#7c3aed', false);
+            pts.forEach((p) => { s += `<circle cx="${sx(p.leaves)}" cy="${sy(p.val_accuracy)}" r="3.5" fill="#7c3aed"><title>α=${p.alpha}｜${p.leaves} 葉｜訓練 ${pct(p.train_accuracy)}｜驗證 ${pct(p.val_accuracy)}</title></circle>`; });
+            const mark = (leaves, col, label, dy) => {
+                const p = pts.find((q) => q.leaves === leaves) || pts.reduce((a, b) => Math.abs(b.leaves - leaves) < Math.abs(a.leaves - leaves) ? b : a);
+                const x = sx(p.leaves);
+                return `<line x1="${x}" y1="${T}" x2="${x}" y2="${H - B}" stroke="${col}" stroke-width="1.5" stroke-dasharray="2 3"/><text x="${x + 4}" y="${T + dy}" font-size="10" font-weight="bold" fill="${col}">${label}</text>`;
+            };
+            s += mark(pr.leaves_after, '#0f172a', '目前', H - B - T - 8);
+            const rec = pts.find((p) => Math.abs(p.alpha - pr.alpha_recommended) < 1e-9);
+            if (rec && rec.leaves !== pr.leaves_after) s += mark(rec.leaves, '#7c3aed', '建議', H - B - T - 22);
+            s += `<g font-size="10"><line x1="${L}" y1="${H - 9}" x2="${L + 20}" y2="${H - 9}" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 3"/><text x="${L + 24}" y="${H - 6}" fill="#475569">訓練</text>
+                <line x1="${L + 62}" y1="${H - 9}" x2="${L + 82}" y2="${H - 9}" stroke="#7c3aed" stroke-width="2"/><text x="${L + 86}" y="${H - 6}" fill="#475569">驗證</text></g></svg>`;
+            $('curveChart').innerHTML = s;
+        }
+
+        function cmTable(id, m, pr) {
+            const max = Math.max(...m.flat(), 1);
+            const head = `<tr><th class="p-1.5"></th>${pr.class_names.map((c) => `<th class="p-1.5 font-semibold text-slate-600 text-center">預測<br>${esc(c)}</th>`).join('')}<th class="p-1.5 font-semibold text-slate-500 text-center">召回率</th></tr>`;
+            const rows = m.map((row, i) => {
+                const tot = row.reduce((a, b) => a + b, 0);
+                return `<tr><th class="p-1.5 text-left font-semibold text-slate-600 whitespace-nowrap">真實 ${esc(pr.class_names[i])}</th>${row.map((v, j) =>
+                    `<td class="p-1.5 text-center tabular-nums border border-slate-200 ${i === j ? 'font-bold' : ''}" style="background:${i === j ? `rgba(5,150,105,${0.1 + 0.5 * v / max})` : (v ? `rgba(225,29,72,${0.1 + 0.5 * v / max})` : '#fff')}">${v}</td>`).join('')}
+                    <td class="p-1.5 text-center tabular-nums text-slate-600">${tot ? pct(row[i] / tot, 0) : '--'}</td></tr>`;
+            }).join('');
+            $(id).innerHTML = head + rows;
+        }
+
+        function renderRules(pr) {
+            $('rulesNote').textContent = `${pr.rules.length} 條規則；「測試」欄為落入該規則的測試樣本數與正確率（樣本少時僅供參考）`;
+            $('ruleCards').innerHTML = pr.rules.map((r) => {
+                const col = colorOf(r.class, CLASSES.indexOf(r.class));
+                return `<div class="rounded-lg border p-3 flex flex-col md:flex-row md:items-center gap-2 md:gap-4 ${r.matched ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900' : 'border-slate-200'}">
+                    <div class="flex-1 min-w-0">
+                        <div class="text-[11px] text-slate-400">規則 ${r.rule_id}${r.matched ? ' ・ <span class="font-bold text-slate-900">本次缺陷符合此規則</span>' : ''}</div>
+                        <div class="text-xs font-mono text-slate-800 break-words">${esc(r.text)}</div>
+                    </div>
+                    <div class="flex items-center gap-3 text-[11px] text-slate-600 shrink-0">
+                        <span class="px-2 py-0.5 rounded border font-semibold" style="color:${col};border-color:${col}">${esc(r.class)} ${esc(r.class_label)}</span>
+                        <span>訓練 ${r.train_samples} 筆・純度 ${pct(r.train_purity, 0)}</span>
+                        <span>測試 ${r.test_samples} 筆${r.test_accuracy == null ? '' : '・' + pct(r.test_accuracy, 0)}</span>
+                    </div></div>`;
+            }).join('');
+        }
+
+        function renderImportance(imp) {
+            $('impAnswer').textContent = imp.answer_text || '';
+            $('impWarn').innerHTML = (imp.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+            const rows = imp.ranking || [];
+            const max = Math.max(...rows.map((r) => Math.max(r.importance, r.permutation_importance)), 1e-9);
+            const w = (v) => Math.max(0, v) / max * 100;
+            $('impBars').innerHTML = rows.map((r) => `<div class="space-y-1">
+                <div class="flex items-center justify-between text-xs"><span class="font-semibold text-slate-800">${r.rank}. ${esc(r.label)} <span class="font-normal text-slate-400">(${esc(r.feature)}・用於 ${r.splits_used} 次切分)</span></span>
+                <span class="tabular-nums text-slate-700">影響力 ${fmt(r.importance, 3)}</span></div>
+                <div class="h-3 rounded-full bg-slate-100"><div class="h-full rounded-full" style="width:${w(r.importance)}%;background:${BAR_COLORS[r.feature] || '#0284c7'}"></div></div>
+                <div class="flex items-center gap-2"><div class="h-1.5 rounded-full bg-slate-400" style="width:${w(r.permutation_importance)}%"></div><span class="text-[11px] tabular-nums text-slate-500">排列 ${sgn(r.permutation_importance, 3)}</span></div>
+            </div>`).join('');
+        }
+
+        function renderSteps(steps) {
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            let last = '';
+            box.innerHTML = steps.map((s) => {
+                const head = s.skill_name !== last ? `<div class="text-xs font-bold text-blue-800 pt-1">▸ ${esc(s.skill_name)}</div>` : '';
+                last = s.skill_name;
+                return head + `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`;
+            }).join('');
+        }
+
+        buildFields();
+        resetAll();
+        $('runBtn').addEventListener('click', () => run(false));
+        $('autoBtn').addEventListener('click', () => run(true));
+        $('resetBtn').addEventListener('click', resetAll);
+    </script>
+</body>
+</html>

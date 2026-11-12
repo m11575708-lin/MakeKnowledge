@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>08. 歷史維修案例檢索與備品推薦頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xl border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm font-semibold tracking-wide">正在以 KNN 檢索相似案例並計算備品推薦分數，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 頂部導覽 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">歷史維修案例檢索與備品推薦</h1>
+                    <p class="text-xs text-slate-500">系統頁面：08. 歷史維修案例檢索與備品推薦頁 (/equipment/case-retrieval) | US-06 / US-07</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                    👤 角色：設備維修工程師
+                </span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                    🤖 MCP Tools：skill_09 / 10 / 11
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>案例庫來源：</strong><span id="dataSourceLabel">尚未執行檢索</span></span>
+                    <span>🧮 <strong>演算法：</strong>KNN (歐氏距離) ＋ 物品協同過濾 (Item-based CF)</span>
+                </div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>相似案例與備品推薦僅供維修參考，請以現場實際檢查為準。未放入真實工單 (data/repair_cases.json) 時，案例庫與備品庫存皆為手寫的示範資料，不代表任何實際設備或庫存。
+                </div>
+            </section>
+
+            <!-- 故障碼與特徵搜尋面板 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+                    <div class="space-y-1.5">
+                        <label for="errorCodeSelect" class="block text-sm font-semibold text-slate-800">設備故障碼</label>
+                        <select id="errorCodeSelect" class="px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500 min-w-64">
+                            <option value="E-8021">E-8021 馬達過熱</option>
+                            <option value="E-8032">E-8032 軸承磨損</option>
+                            <option value="E-7015">E-7015 液壓壓力流失</option>
+                            <option value="E-6040">E-6040 離合器／煞車異常</option>
+                        </select>
+                    </div>
+                    <p class="text-xs text-slate-500 sm:pb-2.5">選擇故障碼會帶入該故障的典型特徵，之後可自行調整。</p>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                        <div class="text-xs font-bold text-slate-500">故障特徵向量與距離權重</div>
+                        <span class="text-xs text-slate-500">權重 ×1 為依故障碼自動校正的結果；調為 0 代表檢索時忽略該特徵</span>
+                    </div>
+                    <div id="featureFields" class="grid grid-cols-1 gap-y-5"></div>
+                </div>
+
+                <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer w-fit">
+                    <input id="restrictCode" type="checkbox" class="h-4 w-4 accent-sky-600">
+                    僅比對相同故障碼的歷史案例
+                </label>
+
+                <div class="flex flex-wrap gap-2 pt-1">
+                    <button id="runBtn" type="button" class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-medium text-sm rounded-lg transition-colors shadow-xs cursor-pointer">
+                        檢索相似案例與推薦備品
+                    </button>
+                    <button id="resetBtn" type="button" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-lg border border-slate-200 transition-colors cursor-pointer">
+                        還原預設值
+                    </button>
+                </div>
+            </section>
+
+            <!-- Guardrail 卡片 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">⚠️ 安全檢核提示（Guardrail 防呆觸發）</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 故障模式比對 -->
+            <section id="patternSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🧭 故障碼特徵比對</span>
+                    <span id="patternBadge" class="px-3 py-1 font-semibold text-xs rounded-full border bg-sky-50 text-sky-800 border-sky-200"></span>
+                </div>
+                <p id="patternAnswer" class="text-sm text-slate-700"></p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="rounded-lg border border-slate-200 p-3">
+                        <div class="text-[11px] text-slate-500">特徵吻合度（高斯核）</div>
+                        <div id="patternConf" class="text-2xl font-bold text-slate-900 tabular-nums">--</div>
+                        <div class="text-[11px] text-slate-400">1 代表與該故障碼的典型模式完全相同</div>
+                    </div>
+                    <div class="md:col-span-2 rounded-lg border border-slate-200 p-3 space-y-1.5">
+                        <div class="text-[11px] text-slate-500">校正後的特徵權重（越大越能區辨此故障碼）</div>
+                        <div id="weightBars" class="space-y-1.5"></div>
+                    </div>
+                </div>
+                <ul id="patternWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+            </section>
+
+            <!-- Top 3 相似案例 -->
+            <section id="casesSection" class="space-y-4 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🗂️ Top 3 相似維修案例</span>
+                    <span id="casesNote" class="text-xs text-slate-500"></span>
+                </div>
+                <ul id="casesWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                <div id="caseCards" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                    <div class="text-sm font-bold text-slate-900">🔧 故障排除對比表</div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left align-top" id="compareTable"></table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 推薦備品 -->
+            <section id="partsSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">📦 推薦維修備品與庫存</span>
+                    <span class="text-xs text-slate-500">分數越高，越常出現在這些近鄰工單及與其搭配使用的備品中</span>
+                </div>
+                <p id="partsAnswer" class="text-sm text-slate-700"></p>
+                <ul id="partsWarn" class="text-xs space-y-1"></ul>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead>
+                            <tr class="text-slate-500 border-b border-slate-200">
+                                <th class="py-2 pr-3 font-semibold">備品編號</th>
+                                <th class="py-2 pr-3 font-semibold">備品名稱</th>
+                                <th class="py-2 pr-3 font-semibold w-44">推薦分數</th>
+                                <th class="py-2 pr-3 font-semibold">依據</th>
+                                <th class="py-2 pr-3 font-semibold text-right">歷史工單數</th>
+                                <th class="py-2 font-semibold">目前庫存</th>
+                            </tr>
+                        </thead>
+                        <tbody id="partsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_10 → skill_09 → skill_11（先校正權重，再檢索，最後推薦備品）</span>
+                </div>
+
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未進行檢索...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const FIELDS = [
+            { key: 'vibration',   label: '振動值',   unit: 'mm/s', min: 0, max: 10,  step: 0.1,  hint: '示範案例約 1.6–5.5' },
+            { key: 'temperature', label: '運轉溫度', unit: '°C',   min: 0, max: 120, step: 1,    hint: '示範案例約 57–83' },
+            { key: 'pressure',    label: '運轉壓力', unit: 'MPa',  min: 0, max: 4,   step: 0.05, hint: '示範案例約 0.8–2.9' },
+        ];
+        const PRESETS = {
+            'E-8021': { vibration: 2.8, temperature: 75, pressure: 1.8 },
+            'E-8032': { vibration: 4.8, temperature: 65, pressure: 1.8 },
+            'E-7015': { vibration: 1.8, temperature: 60, pressure: 1.0 },
+            'E-6040': { vibration: 3.3, temperature: 70, pressure: 2.6 },
+        };
+        const STOCK_STYLE = {
+            NORMAL:  { text: '🟢 正常',    cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+            LOW:     { text: '🟡 庫存偏低', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+            OUT:     { text: '🔴 缺料',    cls: 'bg-rose-100 text-rose-800 border-rose-200' },
+            UNKNOWN: { text: '⚪ 無主檔',   cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+        };
+        const WEIGHT_COLORS = ['#0284c7', '#7c3aed', '#0d9488'];
+
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const isNum = (n) => typeof n === 'number' && isFinite(n);
+        const fmt = (n, d = 1) => isNum(n) ? n.toFixed(d) : '--';
+        const pct = (n, d = 0) => isNum(n) ? (n * 100).toFixed(d) + '%' : '--';
+
+        function buildFields() {
+            $('featureFields').innerHTML = FIELDS.map((f) => `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <label for="num_${f.key}" class="text-sm font-semibold text-slate-800">${f.label}</label>
+                            <div class="flex items-center gap-1.5">
+                                <input id="num_${f.key}" type="number" min="${f.min}" max="${f.max}" step="${f.step}"
+                                    class="w-24 px-2 py-1.5 border border-slate-300 rounded-md text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                <span class="text-xs text-slate-500 w-9">${f.unit}</span>
+                            </div>
+                        </div>
+                        <input id="rng_${f.key}" type="range" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}" class="w-full accent-sky-600 cursor-pointer">
+                        <div class="text-[11px] text-slate-400">${f.hint}</div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <label for="w_${f.key}" class="text-sm text-slate-600">${f.label}的距離權重</label>
+                            <span id="wv_${f.key}" class="text-xs font-semibold text-slate-700 tabular-nums w-10 text-right">×1.0</span>
+                        </div>
+                        <input id="w_${f.key}" type="range" min="0" max="2" step="0.1" value="1" aria-label="${f.label}的距離權重" class="w-full accent-purple-600 cursor-pointer">
+                    </div>
+                </div>`).join('');
+            FIELDS.forEach((f) => {
+                const num = $('num_' + f.key), rng = $('rng_' + f.key), w = $('w_' + f.key);
+                rng.addEventListener('input', () => { num.value = rng.value; });
+                num.addEventListener('input', () => { if (num.value !== '') rng.value = num.value; });
+                w.addEventListener('input', () => { $('wv_' + f.key).textContent = '×' + Number(w.value).toFixed(1); });
+            });
+        }
+
+        function applyPreset(code) {
+            const p = PRESETS[code] || PRESETS['E-8021'];
+            FIELDS.forEach((f) => { $('num_' + f.key).value = p[f.key]; $('rng_' + f.key).value = p[f.key]; });
+        }
+        function resetWeights() {
+            FIELDS.forEach((f) => { $('w_' + f.key).value = 1; $('wv_' + f.key).textContent = '×1.0'; });
+            $('restrictCode').checked = false;
+        }
+
+        function readValues() {
+            const out = { error_code: $('errorCodeSelect').value, restrict_to_error_code: $('restrictCode').checked };
+            for (const f of FIELDS) {
+                const raw = $('num_' + f.key).value.trim();
+                if (raw === '' || !isFinite(Number(raw))) {
+                    alert(`請輸入有效的「${f.label}」數值`); $('num_' + f.key).focus(); return null;
+                }
+                out[f.key] = Number(raw);
+                out['w_' + f.key] = Number($('w_' + f.key).value);
+            }
+            return out;
+        }
+
+        async function runSearch() {
+            const values = readValues();
+            if (!values) return;
+            $('algorithmStepsContainer').innerHTML = '';
+            $('loadingOverlay').classList.remove('hidden');
+            try {
+                const res = await fetch('/api/case-retrieval', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(values),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.answer_text || '伺服器計算失敗 (HTTP ' + res.status + ')');
+                render(data);
+            } catch (err) {
+                console.error(err);
+                alert('無法完成檢索：' + err.message + '\n請確認 app.py 是否正在運行。');
+            } finally {
+                $('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        function sourceLabel(src) {
+            if (!src) return '尚未執行檢索';
+            return src.startsWith('demo') ? '示範資料 (' + src + ')' : src;
+        }
+
+        function show(id, on) { $(id).classList.toggle('hidden', !on); }
+
+        function render(data) {
+            const pat = data.pattern || {}, cs = data.cases || {}, pt = data.parts || {};
+            $('dataSourceLabel').textContent = sourceLabel(cs.data_source || pat.data_source || pt.data_source);
+
+            const problems = [];
+            if (!pat.found) problems.push({ title: '故障碼比對', r: pat });
+            if (!cs.found) problems.push({ title: '相似案例檢索', r: cs });
+            else if (!pt.found) problems.push({ title: '備品推薦', r: pt });
+            show('guardCard', problems.length > 0);
+            if (problems.length) {
+                $('guardMessage').textContent = '以下計算被安全檢核攔截，其餘結果仍照常顯示。';
+                $('guardList').innerHTML = problems.map((p) =>
+                    `<li><strong>${esc(p.title)}：</strong>${esc(p.r.answer_text || '無法完成計算')}` +
+                    ((p.r.warnings || []).length > 1 ? '<ul class="list-[circle] pl-5">' + p.r.warnings.map((w) => `<li>${esc(w)}</li>`).join('') + '</ul>' : '') + '</li>').join('');
+            }
+
+            show('patternSection', !!pat.found);
+            if (pat.found) renderPattern(pat);
+            show('casesSection', !!cs.found);
+            if (cs.found) renderCases(cs);
+            show('partsSection', !!pt.found);
+            if (pt.found) renderParts(pt);
+            renderSteps(data.steps || []);
+        }
+
+        function renderPattern(pat) {
+            $('patternBadge').textContent = `${pat.error_code}　${pat.pattern_label || ''}（${pat.matched_pattern}）`;
+            $('patternAnswer').textContent = pat.answer_text || '';
+            $('patternConf').textContent = isNum(pat.confidence) ? fmt(pat.confidence, 2) : '--';
+            const w = pat.feature_weights || [];
+            const max = Math.max(...w, 1e-9);
+            $('weightBars').innerHTML = FIELDS.map((f, i) => `
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="w-16 text-slate-600">${f.label}</span>
+                    <div class="h-2 flex-1 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${(w[i] || 0) / max * 100}%;background:${WEIGHT_COLORS[i]}"></div></div>
+                    <span class="w-10 text-right tabular-nums text-slate-700">${fmt(w[i], 2)}</span>
+                </div>`).join('');
+            $('patternWarn').innerHTML = (pat.warnings || []).map((x) => `<li>${esc(x)}</li>`).join('');
+        }
+
+        function renderCases(cs) {
+            const list = cs.top3_similar_cases || [];
+            $('casesNote').textContent = `候選 ${cs.n_candidates} 筆案例；相似度 = 1 / (1 + 加權標準化距離)`;
+            $('casesWarn').innerHTML = (cs.warnings || []).map((x) => `<li>${esc(x)}</li>`).join('');
+            $('caseCards').innerHTML = list.map((c) => `
+                <article class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3 flex flex-col">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <div class="text-xs text-slate-500">第 ${c.rank} 相似</div>
+                            <div class="text-sm font-bold text-slate-900">${esc(c.case_id)}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-2xl font-bold tabular-nums text-sky-700">${pct(c.similarity, 0)}</div>
+                            <div class="text-[11px] text-slate-400">距離 ${fmt(c.distance, 3)}</div>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 text-[11px]">
+                        <span class="px-2 py-0.5 rounded border ${c.code_match ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}">${esc(c.error_code)} ${esc(c.pattern_label)}${c.code_match ? '（故障碼相符）' : ''}</span>
+                        <span class="px-2 py-0.5 rounded border bg-slate-50 text-slate-600 border-slate-200">${esc(c.equipment_id)}</span>
+                        <span class="px-2 py-0.5 rounded border bg-slate-50 text-slate-600 border-slate-200">${esc(c.date)}</span>
+                    </div>
+                    <p class="text-xs text-slate-700 leading-relaxed">${esc(c.description)}</p>
+                    <div class="text-xs space-y-1">
+                        ${c.feature_diff.map((d) => `<div class="flex justify-between gap-2"><span class="text-slate-500">${esc(d.label)}</span><span class="tabular-nums text-slate-700">輸入 ${fmt(d.query, 2)} ／ 案例 ${fmt(d.case, 2)} ${esc(d.unit)}</span></div>`).join('')}
+                    </div>
+                    <div class="flex flex-wrap gap-1 mt-auto">${c.parts_used.map((p) => `<span class="px-1.5 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200 text-[11px]">${esc(p)}</span>`).join('')}</div>
+                </article>`).join('');
+
+            const maxSteps = Math.max(...list.map((c) => c.steps.length), 0);
+            const th = list.map((c) => `<th class="py-2 px-3 font-semibold text-slate-800 border-b border-slate-200 min-w-52">${esc(c.case_id)}<div class="font-normal text-slate-500">相似度 ${pct(c.similarity, 0)}</div></th>`).join('');
+            const row = (label, fn) => `<tr class="border-b border-slate-100"><th scope="row" class="py-2 pr-3 font-semibold text-slate-500 whitespace-nowrap align-top">${label}</th>${list.map((c) => `<td class="py-2 px-3 text-slate-700 align-top">${fn(c)}</td>`).join('')}</tr>`;
+            let rows = row('故障碼／模式', (c) => `${esc(c.error_code)} ${esc(c.pattern_label)}`)
+                + row('設備／日期', (c) => `${esc(c.equipment_id)}<br>${esc(c.date)}`)
+                + FIELDS.map((f, i) => row(esc(f.label), (c) => `${fmt(c.features[i], 2)} ${esc(f.unit)}`)).join('');
+            for (let s = 0; s < maxSteps; s++) rows += row(`排除步驟 ${s + 1}`, (c) => esc(c.steps[s] || '—'));
+            rows += row('領用備品', (c) => c.parts_used.length ? c.parts_used.map(esc).join('、') : '—');
+            $('compareTable').innerHTML = `<thead><tr><th class="py-2 pr-3 border-b border-slate-200"></th>${th}</tr></thead><tbody>${rows}</tbody>`;
+        }
+
+        function renderParts(pt) {
+            $('partsAnswer').textContent = pt.answer_text || '';
+            $('partsWarn').innerHTML = (pt.warnings || []).map((w) => {
+                const danger = w.startsWith('缺料');
+                return `<li class="${danger ? 'text-rose-700 font-semibold' : 'text-amber-700'}">${danger ? '🔴' : '⚠️'} ${esc(w)}</li>`;
+            }).join('');
+            $('partsBody').innerHTML = (pt.recommended_parts || []).map((r) => {
+                const st = STOCK_STYLE[r.stock_status] || STOCK_STYLE.UNKNOWN;
+                return `<tr class="border-b border-slate-100">
+                    <td class="py-2 pr-3 font-semibold text-slate-800 whitespace-nowrap">${esc(r.part_id)}</td>
+                    <td class="py-2 pr-3 text-slate-700">${esc(r.name)}</td>
+                    <td class="py-2 pr-3"><div class="flex items-center gap-2"><div class="h-2 flex-1 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full bg-sky-600" style="width:${Math.min(100, r.score * 100)}%"></div></div><span class="tabular-nums w-10 text-right text-slate-700">${fmt(r.score, 2)}</span></div></td>
+                    <td class="py-2 pr-3 text-slate-600">${esc(r.source)}${r.used_in_neighbors ? `（${r.used_in_neighbors} 筆近鄰）` : ''}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums text-slate-600">${r.support_cases}</td>
+                    <td class="py-2"><span class="inline-block px-2 py-0.5 rounded border font-medium ${st.cls}">${st.text}</span><span class="ml-1.5 text-slate-500 tabular-nums">${r.stock} / 安全 ${r.safety_stock}</span></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderSteps(steps) {
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            box.innerHTML = steps.map((s) => `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`).join('');
+        }
+
+        buildFields();
+        applyPreset('E-8021');
+        $('errorCodeSelect').addEventListener('change', (e) => applyPreset(e.target.value));
+        $('resetBtn').addEventListener('click', () => { applyPreset($('errorCodeSelect').value); resetWeights(); });
+        $('runBtn').addEventListener('click', runSearch);
+    </script>
+</body>
+</html>

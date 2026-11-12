@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>05. 公開法規與商品檢驗查詢頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xs border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm font-semibold tracking-wide">正在查詢法規與檢驗資格，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 頂部 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">公開法規與商品檢驗查詢</h1>
+                    <p class="text-xs text-slate-500">系統頁面：05. 公開法規與商品檢驗查詢頁 (/regulations/search) | US-01 / US-02</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">👤 角色：一般民眾</span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">🤖 MCP Tools：skill_01 / 02</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6 min-w-0">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>資料來源：</strong><span id="dataSourceLabel">尚未查詢</span></span>
+                    <span>🧮 <strong>演算法：</strong>餘弦相似度＋KNN（關鍵字）／Jaccard＋KNN（機械資格）</span>
+                </div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>本頁只查詢管理者已宣告為「公開」的文件，不含廠內資料。查詢結果是文字相似度的比對，<strong>僅供參考，不具法律效力</strong>，
+                    實際規定請以官方公告為準。機械資格比對的規範如果標示「內建示範資料」，代表尚未放入正式條文（data/qualification_rules.json），不是真正的法條。
+                </div>
+            </section>
+
+            <!-- 搜尋面板 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div>
+                    <label for="queryInput" class="block text-sm font-semibold text-slate-800 mb-1.5">貨品號列／關鍵字</label>
+                    <input id="queryInput" type="text" maxlength="200" placeholder="例如：電動工具 絕緣、衝壓機 操作人員"
+                           class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="equipSelect" class="block text-sm font-semibold text-slate-800 mb-1.5">機械類別（查詢操作資格）</label>
+                        <select id="equipSelect" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                            <option value="">不指定</option>
+                            <option>衝壓剪切機械</option>
+                            <option>電動工具</option>
+                            <option>升降機具</option>
+                        </select>
+                    </div>
+                    <div id="credBox" class="hidden">
+                        <label for="credInput" class="block text-sm font-semibold text-slate-800 mb-1.5">您目前具備的資格 <span class="text-xs font-normal text-slate-400">（用逗號或頓號分隔，可留空）</span></label>
+                        <input id="credInput" type="text" maxlength="300" placeholder="例如：專任操作人員、教育訓練結業證書"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                </div>
+                <div>
+                    <div class="text-sm font-semibold text-slate-800 mb-1.5">法規類型 <span class="text-xs font-normal text-slate-400">（只影響關鍵字查詢）</span></div>
+                    <div class="flex flex-wrap gap-4 text-sm">
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="type accent-sky-600" value="CNS 標準" checked> CNS 標準</label>
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="type accent-sky-600" value="職安法規" checked> 職安法規</label>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button id="runBtn" type="button" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold rounded-lg shadow-xs cursor-pointer">查詢法規與檢驗資格</button>
+                    <button id="clearBtn" type="button" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-sm rounded-lg cursor-pointer">清除</button>
+                </div>
+            </section>
+
+            <!-- Guardrail 卡 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">🛡️ 安全檢核攔截 (Guardrail)</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 法規條文 -->
+            <section id="regSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">📜 相關法規條文 <span class="text-[11px] font-normal text-slate-400">#SK-01</span></span>
+                    <span id="regBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                </div>
+                <p id="regNote" class="text-xs text-slate-500"></p>
+                <div id="regCards" class="space-y-3"></div>
+            </section>
+
+            <!-- 機械資格 -->
+            <section id="qualSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🪪 操作資格比對 <span class="text-[11px] font-normal text-slate-400">#SK-02</span></span>
+                    <span id="qualBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                </div>
+                <div id="qualBody" class="space-y-3 text-sm"></div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_01（關鍵字）／skill_02（機械資格）</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未執行...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const isNum = (n) => typeof n === 'number' && isFinite(n);
+        const show = (id, on) => $(id).classList.toggle('hidden', !on);
+        const safeUrl = (u) => (typeof u === 'string' && /^https?:\/\/[^\s<>"']+$/i.test(u)) ? u : '';
+        const BADGE = {
+            green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            amber: 'bg-amber-50 text-amber-700 border-amber-200',
+            rose: 'bg-rose-50 text-rose-700 border-rose-200',
+        };
+
+        function guard(message, list) {
+            show('guardCard', !!message);
+            $('guardMessage').textContent = message || '';
+            $('guardList').innerHTML = (list || []).map((x) => `<li>${esc(x)}</li>`).join('');
+        }
+        async function postJson(url, body) {
+            const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            let d = {};
+            try { d = await res.json(); } catch (e) { /* 非 JSON */ }
+            return { ok: res.ok && d.status !== 'error', status: res.status, d };
+        }
+
+        // ---------- 渲染 ----------
+        function renderReg(r) {
+            show('regSection', true);
+            const b = $('regBadge');
+            const guardrail = String(r.guardrail_status || '');
+            if (r.found) {
+                b.textContent = `最高相似度 ${isNum(r.results[0].similarity_score) ? r.results[0].similarity_score.toFixed(2) : '--'}`;
+                b.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + BADGE.green;
+            } else {
+                b.textContent = guardrail.startsWith('BLOCKED') ? '查無資料（Guardrail）' : '無結果';
+                b.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + BADGE.rose;
+            }
+            $('regNote').textContent = r.found ? `在 ${r.n_searchable} 份公開文件中找到 ${r.results.length} 筆相關條文（門檻 ${r.threshold}）。` : (r.answer_text || '');
+            $('regCards').innerHTML = (r.results || []).map((x, i) => {
+                const url = safeUrl(x.source_url);
+                return `<article class="border border-slate-200 rounded-lg p-4 space-y-2">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div><div class="text-[11px] text-slate-400">${esc(x.regulation_id)} · ${esc(x.category)}</div>
+                            <h3 class="text-sm font-bold text-slate-900 break-words">${esc(x.title)}</h3></div>
+                        <span class="px-2 py-0.5 rounded-full border text-xs font-semibold whitespace-nowrap ${i === 0 ? BADGE.green : BADGE.amber}">相似度 ${isNum(x.similarity_score) ? x.similarity_score.toFixed(2) : '--'}</span>
+                    </div>
+                    <p class="text-xs text-slate-600 leading-relaxed">${esc(x.summary)}</p>
+                    <details class="text-xs"><summary class="cursor-pointer text-sky-700 hover:underline">展開完整條文</summary>
+                        <div class="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-md whitespace-pre-wrap break-words leading-relaxed">${esc(x.content)}</div></details>
+                    <div class="text-[11px] text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
+                        <span>授權：${esc(x.license_type)}</span>
+                        ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="text-sky-700 hover:underline">原始出處</a>` : '<span>原始出處：尚未登記</span>'}</div>
+                </article>`;
+            }).join('');
+        }
+
+        function chips(list, cls) {
+            return (list || []).length ? list.map((c) => `<span class="px-2 py-0.5 rounded-full border text-xs ${cls}">${esc(c)}</span>`).join(' ') : '<span class="text-xs text-slate-400">無</span>';
+        }
+
+        function renderQual(q) {
+            show('qualSection', true);
+            const b = $('qualBadge');
+            const demo = String(q.data_source || '').includes('示範');
+            if (q.found) {
+                const ok = q.qualification_status === 'QUALIFIED';
+                b.textContent = ok ? '您提供的資格已涵蓋' : '尚缺資格';
+                b.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + (ok ? BADGE.green : BADGE.amber);
+                const url = safeUrl(q.source_url);
+                $('qualBody').innerHTML = `
+                    <div><div class="text-[11px] text-slate-400">${esc(q.regulation_id)} · ${esc(q.equipment_type)}</div>
+                        <h3 class="font-bold text-slate-900">${esc(q.matched_qualification)}</h3></div>
+                    <p class="text-xs text-slate-600 leading-relaxed">${esc((q.search_results[0] || {}).summary)}</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div><div class="font-semibold text-slate-600 mb-1">已具備</div>${chips(q.matched_credentials, 'bg-emerald-50 text-emerald-700 border-emerald-200')}</div>
+                        <div><div class="font-semibold text-slate-600 mb-1">尚缺</div>${chips(q.missing_credentials, 'bg-rose-50 text-rose-700 border-rose-200')}</div>
+                    </div>
+                    <div class="text-xs text-slate-500">Jaccard 綜合分數 ${isNum(q.jaccard_score) ? q.jaccard_score.toFixed(2) : '--'}（資格集合 ${isNum(q.credential_jaccard) ? q.credential_jaccard.toFixed(2) : '--'}、文字 ${isNum(q.text_jaccard) ? q.text_jaccard.toFixed(2) : '--'}）
+                        ${url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="text-sky-700 hover:underline">原始出處</a>` : ''}</div>
+                    ${(q.search_results || []).length > 1 ? `<div class="text-xs text-slate-500">其他相近規範：${q.search_results.slice(1).map((x) => esc(x.title) + '（' + (isNum(x.jaccard_score) ? x.jaccard_score.toFixed(2) : '--') + '）').join('、')}</div>` : ''}`;
+            } else {
+                b.textContent = '查無相符規範';
+                b.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + BADGE.rose;
+                $('qualBody').innerHTML = `<p class="text-sm text-slate-700">${esc(q.answer_text)}</p>`;
+            }
+            if (demo) $('qualBody').insertAdjacentHTML('afterbegin', '<div class="bg-amber-50 border-l-4 border-amber-500 p-2 rounded-r text-xs text-amber-900">此規範來自「內建示範資料」，不是正式法條。</div>');
+        }
+
+        function renderSteps(groups) {
+            const steps = groups.flat();
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            let last = '', n = 0;
+            box.innerHTML = steps.map((s) => {
+                const head = s.skill_name !== last ? `<div class="text-xs font-bold text-blue-800 pt-1">▸ ${esc(s.skill_name)}</div>` : '';
+                last = s.skill_name;
+                return head + `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`;
+            }).join('');
+        }
+
+        // ---------- 主流程 ----------
+        async function run() {
+            const query = $('queryInput').value.trim();
+            const equip = $('equipSelect').value;
+            guard('');
+            if (!query && !equip) { guard('請輸入關鍵字，或選擇機械類別。'); return; }
+            const types = Array.from(document.querySelectorAll('.type:checked')).map((e) => e.value);
+            const creds = $('credInput').value.split(/[,，、;；\n]/).map((s) => s.trim()).filter(Boolean);
+            if (creds.length > 20 || creds.some((c) => c.length > 60)) { guard('資格最多 20 項、每項 60 字以內。'); return; }
+            show('loadingOverlay', true);
+            show('regSection', false); show('qualSection', false);
+            const errors = [], groups = [], sources = [];
+            try {
+                const jobs = [];
+                if (query) jobs.push(postJson('/api/regulation-search', { query, types, top_k: 3, threshold: 0.10 }).then((x) => ['reg', x]));
+                if (equip) jobs.push(postJson('/api/qualification-match', { equipment_type: equip, user_credentials: creds, query, top_k: 3, threshold: 0.20 }).then((x) => ['qual', x]));
+                const out = await Promise.all(jobs);
+                const order = { reg: 0, qual: 1 };
+                out.sort((a, b) => order[a[0]] - order[b[0]]);
+                for (const [kind, { ok, status, d }] of out) {
+                    if (!ok) { errors.push((kind === 'reg' ? '法規查詢：' : '資格比對：') + (d.answer_text || `失敗（HTTP ${status}）`)); continue; }
+                    if (kind === 'reg') { renderReg(d); sources.push(d.n_searchable === 0 ? '公開文件（尚無）' : `docs/ 公開文件（${d.n_searchable} 份）`); }
+                    else { renderQual(d); sources.push(d.data_source || '--'); }
+                    groups.push(d.steps || []);
+                }
+                $('dataSourceLabel').textContent = sources.join('；') || '--';
+                renderSteps(groups);
+                if (errors.length) guard(errors.join('；'));
+            } catch (err) {
+                guard('無法連線到後端：' + err.message);
+            } finally {
+                show('loadingOverlay', false);
+            }
+        }
+
+        $('runBtn').addEventListener('click', run);
+        $('queryInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+        $('equipSelect').addEventListener('change', () => show('credBox', !!$('equipSelect').value));
+        $('clearBtn').addEventListener('click', () => {
+            $('queryInput').value = ''; $('equipSelect').value = ''; $('credInput').value = '';
+            show('credBox', false); show('regSection', false); show('qualSection', false); guard('');
+            $('dataSourceLabel').textContent = '尚未查詢';
+            $('algorithmStepsContainer').innerHTML = '<div class="text-xs text-slate-400 italic">尚未執行...</div>';
+        });
+    </script>
+</body>
+</html>

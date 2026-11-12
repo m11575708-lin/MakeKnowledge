@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>07. 設備突發故障風險評估頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xl border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm font-semibold tracking-wide">正在擬合邏輯迴歸並掃描成本最低的預警門檻，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 頂部導覽 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">設備突發故障風險評估</h1>
+                    <p class="text-xs text-slate-500">系統頁面：07. 設備突發故障風險評估頁 (/equipment/failure-risk) | US-04 / US-05</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                    👤 角色：設備維修工程師
+                </span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                    🤖 MCP Tools：skill_06 / 07 / 08
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>模型資料來源：</strong><span id="dataSourceLabel">尚未執行評估</span></span>
+                    <span>🧮 <strong>演算法：</strong>邏輯迴歸 (Sigmoid) ＋ 代價敏感門檻取捨</span>
+                </div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>風險機率與門檻僅供維修排程參考。未放入真實歷史資料 (data/failure_history.csv) 時，模型以示範合成資料訓練，數值不代表任何實際設備；成本數字為您輸入的假設值。
+                </div>
+            </section>
+
+            <!-- 運轉狀態與成本設定 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+                    <div class="space-y-1.5">
+                        <label for="equipmentSelect" class="block text-sm font-semibold text-slate-800">設備 ID</label>
+                        <select id="equipmentSelect" class="px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500 min-w-56">
+                            <option value="EQ-PRESS-01">EQ-PRESS-01 衝壓機 1 號</option>
+                            <option value="EQ-SHEAR-02">EQ-SHEAR-02 剪切機 2 號</option>
+                            <option value="EQ-LIFT-03">EQ-LIFT-03 升降機 3 號</option>
+                        </select>
+                    </div>
+                    <p class="text-xs text-slate-500 sm:pb-2.5">切換設備會帶入該設備的典型運轉狀態，之後可自行調整。模型為全廠共用，不區分設備。</p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-bold text-slate-500 mb-3">運轉狀態</div>
+                    <div id="sensorFields" class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5"></div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-4">
+                    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                        <div class="text-xs font-bold text-slate-500">成本矩陣</div>
+                        <span id="ratioHint" class="text-xs text-slate-500"></span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                        <div class="space-y-1.5">
+                            <label for="cost_downtime" class="block text-sm font-semibold text-slate-800">停機損失成本 (漏報時)</label>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm text-slate-500">$</span>
+                                <input id="cost_downtime" type="number" min="1" step="1000" class="w-40 px-3 py-2 border border-slate-300 rounded-md text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                <span class="text-xs text-slate-500">每次突發停機</span>
+                            </div>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label for="cost_inspection" class="block text-sm font-semibold text-slate-800">誤報檢修成本 (誤報時)</label>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm text-slate-500">$</span>
+                                <input id="cost_inspection" type="number" min="1" step="100" class="w-40 px-3 py-2 border border-slate-300 rounded-md text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                <span class="text-xs text-slate-500">每次派工檢修</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 pt-1">
+                    <button id="runBtn" type="button" class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-medium text-sm rounded-lg transition-colors shadow-xs cursor-pointer">
+                        計算故障風險與最佳門檻
+                    </button>
+                    <button id="resetBtn" type="button" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-lg border border-slate-200 transition-colors cursor-pointer">
+                        還原預設值
+                    </button>
+                </div>
+            </section>
+
+            <!-- Guardrail 卡片 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">⚠️ 安全檢核提示（Guardrail 防呆觸發）</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 風險結果 -->
+            <section id="riskSection" class="space-y-6 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                        <div class="flex items-center justify-between flex-wrap gap-2">
+                            <span class="text-sm font-bold text-slate-900">🚨 突發故障風險</span>
+                            <span id="riskBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                        </div>
+                        <div class="flex items-baseline gap-3 flex-wrap">
+                            <span id="probValue" class="text-5xl font-bold text-slate-900 tabular-nums">--</span>
+                            <span class="text-base text-slate-500">故障機率</span>
+                            <span id="oddsText" class="text-sm text-slate-500"></span>
+                        </div>
+                        <div class="space-y-1.5 pt-1">
+                            <div class="relative h-3 rounded-full bg-slate-100 overflow-hidden">
+                                <div id="probBar" class="h-full rounded-full transition-all duration-500" style="width:0%"></div>
+                            </div>
+                            <div id="probScale" class="relative h-7 text-[11px] text-slate-500"></div>
+                        </div>
+                        <p id="riskAnswer" class="text-sm text-slate-700 leading-relaxed"></p>
+                        <ul id="riskWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                        <div class="text-sm font-bold text-slate-900">📏 模型評估指標</div>
+                        <p class="text-[11px] text-slate-400 -mt-1">以未參與訓練的測試集計算</p>
+                        <dl class="space-y-2 text-sm">
+                            <div class="flex justify-between"><dt class="text-slate-500">AUC</dt><dd id="mAuc" class="font-semibold tabular-nums"></dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">Accuracy (θ=0.5)</dt><dd id="mAcc" class="font-semibold tabular-nums"></dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">Log-loss</dt><dd id="mLoss" class="font-semibold tabular-nums"></dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">訓練 / 測試筆數</dt><dd id="mN" class="font-semibold tabular-nums"></dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">訓練集故障率</dt><dd id="mPrev" class="font-semibold tabular-nums"></dd></div>
+                        </dl>
+                    </div>
+                </div>
+
+                <!-- Sigmoid 機率分布圖 -->
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <span class="text-sm font-bold text-slate-900">📈 Sigmoid 機率曲線</span>
+                        <span id="sigmoidNote" class="text-xs text-slate-500"></span>
+                    </div>
+                    <div id="sigmoidBox" class="w-full overflow-x-auto"></div>
+                </div>
+
+                <!-- 特徵勝算比 -->
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <span class="text-sm font-bold text-slate-900">🔬 各參數的勝算比 (Odds Ratio)</span>
+                        <span class="text-xs text-slate-500">勝算比 &gt; 1 表示該參數越大、故障越容易發生</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead>
+                                <tr class="text-slate-500 border-b border-slate-200">
+                                    <th class="py-2 pr-3 font-semibold">參數</th>
+                                    <th class="py-2 pr-3 font-semibold text-right">輸入值</th>
+                                    <th class="py-2 pr-3 font-semibold text-right">係數 (每單位)</th>
+                                    <th class="py-2 pr-3 font-semibold text-right">勝算比 / 每單位</th>
+                                    <th class="py-2 pr-3 font-semibold text-right">勝算比 / 每 1 個標準差</th>
+                                    <th class="py-2 font-semibold w-36">影響強度</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orBody"></tbody>
+                        </table>
+                    </div>
+                    <p class="text-[11px] text-slate-400">「每單位」受單位大小影響（例如天與 MPa 不能直接比較）；要比較各參數的影響強度請看「每 1 個標準差」。</p>
+                </div>
+            </section>
+
+            <!-- 成本與門檻結果 -->
+            <section id="costSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">💰 預警門檻與總成本取捨</span>
+                    <span id="costEvalNote" class="text-xs text-slate-500"></span>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="rounded-lg border border-slate-200 p-3">
+                        <div class="text-[11px] text-slate-500">最佳預警門檻</div>
+                        <div id="optTheta" class="text-2xl font-bold text-slate-900 tabular-nums">--</div>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 p-3">
+                        <div class="text-[11px] text-slate-500">最低預期總成本</div>
+                        <div id="minCost" class="text-2xl font-bold text-slate-900 tabular-nums">--</div>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 p-3">
+                        <div class="text-[11px] text-slate-500">平均每台成本</div>
+                        <div id="perEq" class="text-2xl font-bold text-slate-900 tabular-nums">--</div>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 p-3">
+                        <div class="text-[11px] text-slate-500">理論門檻 C檢/(C檢+C停)</div>
+                        <div id="theoTheta" class="text-2xl font-bold text-slate-900 tabular-nums">--</div>
+                    </div>
+                </div>
+
+                <div id="decisionBox" class="rounded-lg border p-3 text-sm hidden"></div>
+                <p id="costAnswer" class="text-sm text-slate-700 leading-relaxed"></p>
+                <ul id="costWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+
+                <div id="costCurveBox" class="w-full overflow-x-auto"></div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <caption class="text-left text-xs font-semibold text-slate-600 pb-2">策略成本對照（同一測試集）</caption>
+                        <thead>
+                            <tr class="text-slate-500 border-b border-slate-200">
+                                <th class="py-2 pr-3 font-semibold">策略</th>
+                                <th class="py-2 pr-3 font-semibold text-right">門檻</th>
+                                <th class="py-2 pr-3 font-semibold text-right">漏報 FN</th>
+                                <th class="py-2 pr-3 font-semibold text-right">誤報 FP</th>
+                                <th class="py-2 font-semibold text-right">總成本</th>
+                            </tr>
+                        </thead>
+                        <tbody id="baseBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_06 → skill_07 → skill_08</span>
+                </div>
+
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未進行評估...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const FIELDS = [
+            { key: 'recency_days', label: '距上次維修天數', unit: '天', min: 0,   max: 365, step: 1,    hint: '示範資料約 0–180 天' },
+            { key: 'alarms_90d',   label: '近 90 天警報次數', unit: '次', min: 0,   max: 60,  step: 1,    hint: '示範資料約 0–40 次（整數）' },
+            { key: 'pressure',     label: '運轉壓力',       unit: 'MPa', min: 0,   max: 5,   step: 0.05, hint: '示範資料約 0.8–3.0 MPa' },
+        ];
+        const PRESETS = {
+            'EQ-PRESS-01': { recency_days: 45,  alarms_90d: 12, pressure: 1.8 },
+            'EQ-SHEAR-02': { recency_days: 75,  alarms_90d: 17, pressure: 2.2 },
+            'EQ-LIFT-03':  { recency_days: 120, alarms_90d: 24, pressure: 2.6 },
+        };
+        const DEFAULT_COSTS = { cost_downtime: 50000, cost_inspection: 2000 };
+        const RISK_STYLE = {
+            GREEN:  { text: '🟢 GREEN 低風險',  badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', bar: '#10b981' },
+            YELLOW: { text: '🟡 YELLOW 注意',   badge: 'bg-amber-100 text-amber-800 border-amber-200',       bar: '#f59e0b' },
+            RED:    { text: '🔴 RED 高風險',    badge: 'bg-rose-100 text-rose-800 border-rose-200',          bar: '#f43f5e' },
+        };
+
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const isNum = (n) => typeof n === 'number' && isFinite(n);
+        const fmt = (n, d = 1) => isNum(n) ? n.toFixed(d) : '--';
+        const money = (n) => isNum(n) ? '$' + Math.round(n).toLocaleString('en-US') : '--';
+        const pct = (n, d = 1) => isNum(n) ? (n * 100).toFixed(d) + '%' : '--';
+
+        function buildFields() {
+            $('sensorFields').innerHTML = FIELDS.map((f) => `
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <label for="num_${f.key}" class="text-sm font-semibold text-slate-800">${f.label}</label>
+                        <div class="flex items-center gap-1.5">
+                            <input id="num_${f.key}" type="number" min="${f.min}" max="${f.max}" step="${f.step}"
+                                class="w-24 px-2 py-1.5 border border-slate-300 rounded-md text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                            <span class="text-xs text-slate-500 w-9">${f.unit}</span>
+                        </div>
+                    </div>
+                    <input id="rng_${f.key}" type="range" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}" class="w-full accent-sky-600 cursor-pointer">
+                    <div class="text-[11px] text-slate-400">${f.hint}</div>
+                </div>`).join('');
+            FIELDS.forEach((f) => {
+                const num = $('num_' + f.key), rng = $('rng_' + f.key);
+                rng.addEventListener('input', () => { num.value = rng.value; });
+                num.addEventListener('input', () => { if (num.value !== '') rng.value = num.value; });
+            });
+        }
+
+        function updateRatioHint() {
+            const d = Number($('cost_downtime').value), i = Number($('cost_inspection').value);
+            $('ratioHint').textContent = (d > 0 && i > 0) ? `停機損失是誤報檢修的 ${(d / i).toFixed(1)} 倍` : '';
+        }
+
+        function applyPreset(id) {
+            const p = PRESETS[id] || PRESETS['EQ-PRESS-01'];
+            FIELDS.forEach((f) => { $('num_' + f.key).value = p[f.key]; $('rng_' + f.key).value = p[f.key]; });
+        }
+        function applyCosts() {
+            $('cost_downtime').value = DEFAULT_COSTS.cost_downtime;
+            $('cost_inspection').value = DEFAULT_COSTS.cost_inspection;
+            updateRatioHint();
+        }
+
+        function readValues() {
+            const out = {};
+            for (const f of FIELDS) {
+                const raw = $('num_' + f.key).value.trim();
+                if (raw === '' || !isFinite(Number(raw))) {
+                    alert(`請輸入有效的「${f.label}」數值`); $('num_' + f.key).focus(); return null;
+                }
+                out[f.key] = Number(raw);
+            }
+            for (const [key, label] of [['cost_downtime', '停機損失成本'], ['cost_inspection', '誤報檢修成本']]) {
+                const raw = $(key).value.trim();
+                if (raw === '' || !isFinite(Number(raw)) || Number(raw) <= 0) {
+                    alert(`「${label}」必須是大於 0 的數值`); $(key).focus(); return null;
+                }
+                out[key] = Number(raw);
+            }
+            return out;
+        }
+
+        async function runAssessment() {
+            const values = readValues();
+            if (!values) return;
+            $('algorithmStepsContainer').innerHTML = '';
+            $('loadingOverlay').classList.remove('hidden');
+            try {
+                const res = await fetch('/api/failure-risk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ equipment_id: $('equipmentSelect').value, ...values }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.answer_text || '伺服器計算失敗 (HTTP ' + res.status + ')');
+                render(data);
+            } catch (err) {
+                console.error(err);
+                alert('無法完成評估：' + err.message + '\n請確認 app.py 是否正在運行。');
+            } finally {
+                $('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        function sourceLabel(src) {
+            if (!src) return '尚未執行評估';
+            return src.startsWith('synthetic') ? '示範合成資料 (' + src + ')，非真實設備紀錄' : src;
+        }
+
+        function render(data) {
+            const pred = data.probability || {}, risk = data.risk || {}, cost = data.cost || {};
+            $('dataSourceLabel').textContent = sourceLabel(pred.data_source || cost.data_source);
+
+            const problems = [];
+            if (!pred.found) problems.push({ title: '故障機率', msg: pred.answer_text, list: pred.warnings });
+            else if (!risk.found) problems.push({ title: '風險燈號', msg: risk.answer_text, list: risk.warnings });
+            if (!cost.found) problems.push({ title: '預警門檻', msg: cost.answer_text, list: cost.warnings });
+
+            if (problems.length) {
+                $('guardCard').classList.remove('hidden');
+                $('guardMessage').textContent = problems.length === 1 ? '以下計算被安全檢核攔截，其餘結果仍照常顯示。' : '以下計算被安全檢核攔截。';
+                $('guardList').innerHTML = problems.map((p) =>
+                    `<li><strong>${esc(p.title)}：</strong>${esc(p.msg || '無法完成計算')}` +
+                    ((p.list || []).length > 1 ? '<ul class="list-[circle] pl-5">' + p.list.map((w) => `<li>${esc(w)}</li>`).join('') + '</ul>' : '') + '</li>').join('');
+            } else {
+                $('guardCard').classList.add('hidden');
+            }
+
+            if (pred.found && risk.found) {
+                $('riskSection').classList.remove('hidden');
+                renderRisk(pred, risk, cost);
+                renderSigmoid(pred, risk);
+                renderOdds(pred);
+            } else {
+                $('riskSection').classList.add('hidden');
+            }
+
+            if (cost.found) {
+                $('costSection').classList.remove('hidden');
+                renderCost(cost, pred, risk);
+            } else {
+                $('costSection').classList.add('hidden');
+            }
+            renderSteps(data.steps || []);
+        }
+
+        function renderRisk(pred, risk, cost) {
+            const st = RISK_STYLE[risk.risk_level] || RISK_STYLE.YELLOW;
+            const p = pred.failure_probability;
+            $('probValue').textContent = pct(p, 1);
+            $('oddsText').textContent = '勝算比 ' + fmt(risk.odds_ratio, 2);
+            const badge = $('riskBadge');
+            badge.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + st.badge;
+            badge.textContent = st.text;
+            const bar = $('probBar');
+            bar.style.width = Math.max(1, Math.min(100, p * 100)) + '%';
+            bar.style.background = st.bar;
+
+            const marks = [
+                { v: risk.thresholds.yellow, label: '黃燈 ' + risk.thresholds.yellow },
+                { v: risk.thresholds.red, label: '紅燈 ' + risk.thresholds.red },
+            ];
+            if (cost && cost.found) marks.push({ v: cost.optimal_threshold, label: '最佳門檻 ' + cost.optimal_threshold, accent: true });
+            $('probScale').innerHTML = marks.map((m, i) => {
+                const left = Math.max(0, Math.min(100, m.v * 100));
+                const row = i % 2 === 0 ? 'top-0' : 'top-3.5';
+                return `<div class="absolute -translate-x-1/2 ${row} whitespace-nowrap ${m.accent ? 'text-sky-700 font-semibold' : ''}" style="left:${left}%">▲ ${esc(m.label)}</div>`;
+            }).join('');
+
+            $('riskAnswer').textContent = risk.answer_text || '';
+            $('riskWarn').innerHTML = [...(pred.warnings || []), ...(risk.warnings || [])].map((w) => `<li>${esc(w)}</li>`).join('');
+
+            const m = pred.eval_metrics || {};
+            $('mAuc').textContent = fmt(m.auc, 3);
+            $('mAcc').textContent = fmt(m.accuracy, 3);
+            $('mLoss').textContent = fmt(m.log_loss, 3);
+            $('mN').textContent = `${m.n_train ?? '--'} / ${m.n_test ?? '--'}`;
+            $('mPrev').textContent = pct(m.prevalence_train, 1);
+        }
+
+        function renderSigmoid(pred, risk) {
+            const pts = pred.sigmoid_curve || [];
+            if (pts.length < 2) { $('sigmoidBox').innerHTML = ''; return; }
+            const W = 640, H = 270, L = 48, R = 16, T = 16, B = 42;
+            const zMin = pts[0].z, zMax = pts[pts.length - 1].z;
+            const sx = (z) => L + (z - zMin) / ((zMax - zMin) || 1) * (W - L - R);
+            const sy = (p) => T + (1 - p) * (H - T - B);
+            const yel = risk.thresholds.yellow, red = risk.thresholds.red;
+            const bands = [
+                { y0: sy(yel), y1: H - B, fill: '#10b981' },
+                { y0: sy(red), y1: sy(yel), fill: '#f59e0b' },
+                { y0: T, y1: sy(red), fill: '#f43f5e' },
+            ].map((b) => `<rect x="${L}" y="${b.y0}" width="${W - L - R}" height="${b.y1 - b.y0}" fill="${b.fill}" opacity="0.09"/>`).join('');
+            const line = pts.map((q) => `${sx(q.z).toFixed(1)},${sy(q.probability).toFixed(1)}`).join(' ');
+            const yTicks = [0, 0.25, 0.5, 0.75, 1];
+            const xTicks = [-6, -4, -2, 0, 2, 4, 6];
+            const grid = yTicks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" stroke="#e2e8f0"/><text x="${L - 8}" y="${sy(v) + 4}" text-anchor="end" font-size="11" fill="#64748b">${v.toFixed(2)}</text>`).join('');
+            const xl = xTicks.map((v) => `<text x="${sx(v)}" y="${H - B + 18}" text-anchor="middle" font-size="11" fill="#64748b">${v}</text>`).join('');
+            const z0 = pred.linear_score, p0 = pred.failure_probability;
+            // 標籤放在曲線外側（左上或右下），避免壓在曲線上
+            const flip = sx(z0) < L + 110;
+            const lx = flip ? sx(z0) + 10 : sx(z0) - 12;
+            const ly = flip ? sy(p0) - 36 : Math.max(sy(p0) - 8, T + 12);
+            const lAnchor = flip ? 'start' : 'end';
+
+            $('sigmoidNote').textContent = `線性分數 z = ${fmt(z0, 2)} → P = 1 / (1 + e^-z) = ${fmt(p0, 3)}`;
+            $('sigmoidBox').innerHTML = `
+                <svg viewBox="0 0 ${W} ${H}" class="w-full min-w-[480px]" role="img" aria-label="Sigmoid 曲線，標示目前設備的線性分數與故障機率">
+                    ${bands}${grid}${xl}
+                    <line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#94a3b8"/>
+                    <polyline points="${line}" fill="none" stroke="#0284c7" stroke-width="2.5" stroke-linejoin="round"/>
+                    <line x1="${sx(z0)}" x2="${sx(z0)}" y1="${sy(p0)}" y2="${H - B}" stroke="#f59e0b" stroke-dasharray="4 4"/>
+                    <circle cx="${sx(z0)}" cy="${sy(p0)}" r="6" fill="#f59e0b" stroke="#fff" stroke-width="2"/>
+                    <text x="${lx}" y="${ly}" text-anchor="${lAnchor}" font-size="12" font-weight="600" fill="#b45309">目前 P=${fmt(p0, 2)}</text>
+                    <text x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle" font-size="12" fill="#475569">線性分數 z = wᵀx + b</text>
+                    <text transform="translate(13 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="#475569">故障機率 P</text>
+                </svg>`;
+        }
+
+        function renderOdds(pred) {
+            const rows = pred.feature_odds_ratios || [];
+            const maxLog = Math.max(...rows.map((r) => Math.abs(Math.log(r.odds_ratio_per_sd))), 1e-9);
+            $('orBody').innerHTML = rows.map((r) => {
+                const lg = Math.log(r.odds_ratio_per_sd);
+                const color = lg >= 0 ? '#f43f5e' : '#10b981';
+                const w = Math.abs(lg) / maxLog * 100;
+                return `<tr class="border-b border-slate-100">
+                    <td class="py-2 pr-3 font-medium text-slate-800">${esc(r.label)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${fmt(r.value, 2)} ${esc(r.unit)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${r.raw_coefficient > 0 ? '+' : ''}${fmt(r.raw_coefficient, 4)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${fmt(r.odds_ratio_per_unit, 3)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums font-semibold" style="color:${color}">${fmt(r.odds_ratio_per_sd, 2)}</td>
+                    <td class="py-2"><div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${w}%;background:${color}"></div></div></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderCost(cost, pred, risk) {
+            $('optTheta').textContent = fmt(cost.optimal_threshold, 2);
+            $('minCost').textContent = money(cost.total_cost_min);
+            $('perEq').textContent = money(cost.cost_per_equipment);
+            $('theoTheta').textContent = fmt(cost.theoretical_threshold, 3);
+            $('costEvalNote').textContent = `以測試集 ${cost.n_eval} 筆（其中故障 ${cost.n_eval_failures} 筆）評估`;
+            $('costAnswer').textContent = cost.answer_text || '';
+            $('costWarn').innerHTML = (cost.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+
+            const box = $('decisionBox');
+            if (cost.decision) {
+                const d = cost.decision;
+                box.className = 'rounded-lg border p-3 text-sm ' + (d.alert ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900');
+                box.innerHTML = `<strong>本次決策：${esc(d.action)}</strong>　故障機率 ${pct(d.failure_probability, 1)} ${d.alert ? '≥' : '<'} 最佳門檻 ${fmt(d.optimal_threshold, 2)}。` +
+                    `<span class="block text-xs mt-1 opacity-80">若不處理，預期停機損失約 ${money(d.expected_downtime_loss)}；若派工但其實正常，預期浪費約 ${money(d.expected_inspection_cost_if_normal)}。</span>` +
+                    ((d.alert && risk && risk.found && risk.risk_level !== 'RED')
+                        ? `<span class="block text-xs mt-1 opacity-80">為什麼不是紅燈卻建議派工？燈號依固定機率門檻（黃 ${risk.thresholds.yellow}／紅 ${risk.thresholds.red}）判定，與成本無關；派工建議則依您輸入的成本取捨。停機損失遠高於檢修成本時，即使機率不高也值得先檢修。</span>`
+                        : '');
+            } else {
+                box.className = 'hidden';
+            }
+
+            renderCostCurve(cost, pred);
+
+            $('baseBody').innerHTML = (cost.baselines || []).map((b, i) => `
+                <tr class="border-b border-slate-100 ${i === 0 ? 'bg-sky-50/60 font-semibold' : ''}">
+                    <td class="py-2 pr-3 text-slate-800">${esc(b.name)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${b.threshold == null ? '—' : fmt(b.threshold, 2)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${b.fn}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${b.fp}</td>
+                    <td class="py-2 text-right tabular-nums">${money(b.total_cost)}</td>
+                </tr>`).join('');
+        }
+
+        function renderCostCurve(cost, pred) {
+            const pts = cost.threshold_curve || [];
+            if (pts.length < 2) { $('costCurveBox').innerHTML = ''; return; }
+            const W = 640, H = 316, L = 64, R = 16, T = 18, B = 92;
+            const yMax = Math.max(...pts.map((p) => p.total_cost), 1) * 1.08;
+            const sx = (t) => L + t * (W - L - R);
+            const sy = (c) => T + (1 - c / yMax) * (H - T - B);
+            const path = (key) => pts.map((p) => `${sx(p.threshold).toFixed(1)},${sy(p[key]).toFixed(1)}`).join(' ');
+            const yTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * yMax);
+            const xTicks = [0, 0.2, 0.4, 0.6, 0.8, 1];
+            const yFmt = (v) => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'k' : v.toFixed(0);
+            const grid = yTicks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" stroke="#e2e8f0"/><text x="${L - 8}" y="${sy(v) + 4}" text-anchor="end" font-size="11" fill="#64748b">${yFmt(v)}</text>`).join('');
+            const xl = xTicks.map((v) => `<text x="${sx(v)}" y="${H - B + 18}" text-anchor="middle" font-size="11" fill="#64748b">${v.toFixed(1)}</text>`).join('');
+            const opt = cost.optimal_threshold;
+            const p0 = pred && pred.found ? pred.failure_probability : null;
+            const optRight = opt < 0.7;
+            const legendY = H - 10;
+            const nearOpt = p0 != null && Math.abs(p0 - opt) < 0.3;
+
+            $('costCurveBox').innerHTML = `
+                <svg viewBox="0 0 ${W} ${H}" class="w-full min-w-[480px]" role="img" aria-label="不同預警門檻對應的停機損失、檢修成本與總成本折線圖">
+                    ${grid}${xl}
+                    <line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#94a3b8"/>
+                    <polyline points="${path('downtime_cost')}" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linejoin="round"/>
+                    <polyline points="${path('inspection_cost')}" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4" stroke-linejoin="round"/>
+                    <polyline points="${path('total_cost')}" fill="none" stroke="#0284c7" stroke-width="3" stroke-linejoin="round"/>
+                    ${p0 != null ? `<line x1="${sx(p0)}" x2="${sx(p0)}" y1="${T}" y2="${H - B}" stroke="#64748b" stroke-dasharray="2 4"/>
+                    <text x="${sx(p0) + (p0 > 0.8 ? -6 : 6)}" y="${nearOpt ? T + 30 : T + 12}" text-anchor="${p0 > 0.8 ? 'end' : 'start'}" font-size="11" fill="#475569">目前機率 ${p0.toFixed(2)}</text>` : ''}
+                    <line x1="${sx(opt)}" x2="${sx(opt)}" y1="${T}" y2="${H - B}" stroke="#0284c7" stroke-width="1.5"/>
+                    <circle cx="${sx(opt)}" cy="${sy(cost.total_cost_min)}" r="6" fill="#0284c7" stroke="#fff" stroke-width="2"/>
+                    <text x="${sx(opt) + (optRight ? 10 : -10)}" y="${T + 12}" text-anchor="${optRight ? 'start' : 'end'}" font-size="12" font-weight="600" fill="#0369a1">最佳 θ*=${opt.toFixed(2)}</text>
+                    <text x="${(L + W - R) / 2}" y="${H - B + 44}" text-anchor="middle" font-size="12" fill="#475569">預警門檻 θ（機率 ≥ θ 即派工檢修）</text>
+                    <text transform="translate(13 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="#475569">預期成本 ($)</text>
+                    <g font-size="11" fill="#475569">
+                        <line x1="${L}" x2="${L + 22}" y1="${legendY - 4}" y2="${legendY - 4}" stroke="#0284c7" stroke-width="3"/><text x="${L + 28}" y="${legendY}">總成本</text>
+                        <line x1="${L + 90}" x2="${L + 112}" y1="${legendY - 4}" y2="${legendY - 4}" stroke="#f43f5e" stroke-width="2"/><text x="${L + 118}" y="${legendY}">停機損失（漏報 FN）</text>
+                        <line x1="${L + 270}" x2="${L + 292}" y1="${legendY - 4}" y2="${legendY - 4}" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/><text x="${L + 298}" y="${legendY}">檢修成本（誤報 FP）</text>
+                    </g>
+                </svg>`;
+        }
+
+        function renderSteps(steps) {
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            box.innerHTML = steps.map((s) => `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`).join('');
+        }
+
+        buildFields();
+        applyPreset('EQ-PRESS-01');
+        applyCosts();
+        $('equipmentSelect').addEventListener('change', (e) => applyPreset(e.target.value));
+        $('resetBtn').addEventListener('click', () => { applyPreset($('equipmentSelect').value); applyCosts(); });
+        $('cost_downtime').addEventListener('input', updateRatioHint);
+        $('cost_inspection').addEventListener('input', updateRatioHint);
+        $('runBtn').addEventListener('click', runAssessment);
+    </script>
+</body>
+</html>

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>09. 維修案例登錄與故障碼驗證頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xl border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm font-semibold tracking-wide">正在驗證欄位並以感知器判定合規性，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 頂部導覽 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">維修案例登錄與故障碼驗證</h1>
+                    <p class="text-xs text-slate-500">系統頁面：09. 維修案例登錄與故障碼驗證頁 (/equipment/repair-log) | US-08</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">👤 角色：設備維修工程師</span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">🤖 MCP Tools：skill_12 / 13</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>感知器訓練資料：</strong><span id="dataSourceLabel">尚未執行驗證</span></span>
+                    <span>🧮 <strong>演算法：</strong>正則表達式 ＋ 臨界值檢查 ＋ 單層感知器</span>
+                </div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>感知器的「合規／異常」邊界來自示範規則（高電流且高壓力視為異常），不是任何真實的設備標準；常態範圍同為示範值，請依銘牌調整。只有在你提供人工確認結果且與預測不符時，模型才會學習。
+                </div>
+            </section>
+
+            <!-- 登錄表單 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
+                <div class="text-sm font-bold text-slate-900">📝 維修案例資料</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-1.5">
+                        <label for="equipment_id" class="block text-sm font-semibold text-slate-800">設備 ID</label>
+                        <input id="equipment_id" type="text" placeholder="EQ-PRESS-01" autocomplete="off" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        <div id="err_equipment_id" class="text-[11px] min-h-4"></div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="repair_datetime" class="block text-sm font-semibold text-slate-800">維修日期時間</label>
+                        <input id="repair_datetime" type="datetime-local" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        <div id="err_repair_datetime" class="text-[11px] min-h-4"></div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="error_code" class="block text-sm font-semibold text-slate-800">故障碼</label>
+                        <input id="error_code" type="text" placeholder="E-8021" autocomplete="off" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        <div id="err_error_code" class="text-[11px] min-h-4"></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1.5">
+                            <label for="current_a" class="block text-sm font-semibold text-slate-800">即時電流 (A)</label>
+                            <input id="current_a" type="number" step="0.1" value="45.2" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                            <div id="err_current_a" class="text-[11px] min-h-4"></div>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label for="pressure_mpa" class="block text-sm font-semibold text-slate-800">即時壓力 (MPa)</label>
+                            <input id="pressure_mpa" type="number" step="0.05" value="2.1" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                            <div id="err_pressure_mpa" class="text-[11px] min-h-4"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-1.5">
+                    <div class="flex justify-between"><label for="description" class="block text-sm font-semibold text-slate-800">處置說明</label><span id="descCount" class="text-[11px] text-slate-400 tabular-nums">0 / 500</span></div>
+                    <textarea id="description" rows="3" placeholder="例如：更換馬達軸承並重新潤滑，試運轉 30 分鐘後溫度恢復正常。" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"></textarea>
+                    <div id="err_description" class="text-[11px] min-h-4"></div>
+                </div>
+
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <div class="text-xs font-bold text-slate-600">人工確認結果（選填，用於訓練感知器）</div>
+                    <div class="flex flex-wrap gap-4 text-sm text-slate-700">
+                        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="confirmed" value="" checked class="accent-sky-600">不提供（不更新模型）</label>
+                        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="confirmed" value="0" class="accent-emerald-600">確認為合規</label>
+                        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="confirmed" value="1" class="accent-rose-600">確認為異常</label>
+                    </div>
+                    <p class="text-[11px] text-slate-500">只有「確認結果與感知器預測不一致」時才會調整權重；一致或未提供時模型維持不變。已儲存過的重複案例不會再次訓練。</p>
+                </div>
+
+                <div class="flex flex-wrap gap-2 pt-1">
+                    <button id="saveBtn" type="button" class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-medium text-sm rounded-lg transition-colors shadow-xs cursor-pointer">即時驗證並儲存案例</button>
+                    <button id="checkBtn" type="button" class="px-4 py-2.5 bg-white hover:bg-slate-50 text-sky-700 font-medium text-sm rounded-lg border border-sky-300 transition-colors cursor-pointer">僅驗證（不儲存）</button>
+                    <button id="fillBtn" type="button" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-lg border border-slate-200 transition-colors cursor-pointer">填入範例</button>
+                    <button id="resetModelBtn" type="button" class="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium text-sm rounded-lg border border-rose-200 transition-colors cursor-pointer sm:ml-auto">還原感知器權重</button>
+                </div>
+            </section>
+
+            <!-- 驗證結果 -->
+            <section id="validSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">✅ 欄位驗證結果</span>
+                    <span id="validBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                </div>
+                <p id="validAnswer" class="text-sm text-slate-700"></p>
+                <ul id="fieldList" class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 text-xs"></ul>
+                <ul id="validWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                <div id="storageBox" class="text-xs rounded-lg border px-3 py-2 hidden"></div>
+            </section>
+
+            <!-- Guardrail 卡片 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">⚠️ 安全檢核提示（Guardrail 防呆觸發）</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 感知器看板 -->
+            <section id="percSection" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4 hidden">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🧠 單層感知器合規判定</span>
+                    <span id="percBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                </div>
+                <p id="percAnswer" class="text-sm text-slate-700"></p>
+                <ul id="percWarn" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div class="md:col-span-3 rounded-lg border border-slate-200 p-3">
+                        <div class="text-[11px] text-slate-500 mb-1">決策邊界（超平面）與目前資料點</div>
+                        <div id="scatter"></div>
+                        <div class="flex flex-wrap gap-3 text-[11px] text-slate-600 mt-1">
+                            <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle"></span> 參考資料：合規</span>
+                            <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-rose-500 align-middle"></span> 參考資料：異常</span>
+                            <span><span class="inline-block w-3 h-3 rotate-45 bg-slate-900 align-middle"></span> 本次輸入</span>
+                        </div>
+                    </div>
+                    <div class="md:col-span-2 space-y-3">
+                        <div class="rounded-lg border border-slate-200 p-3 space-y-1.5">
+                            <div class="text-[11px] text-slate-500">判定計算（標準化空間）</div>
+                            <div class="grid grid-cols-2 gap-y-1 text-xs">
+                                <span class="text-slate-500">score</span><span id="pScore" class="text-right tabular-nums font-semibold"></span>
+                                <span class="text-slate-500">距邊界</span><span id="pDist" class="text-right tabular-nums"></span>
+                                <span class="text-slate-500">z（電流, 壓力）</span><span id="pZ" class="text-right tabular-nums"></span>
+                                <span class="text-slate-500">測試集準確率</span><span id="pAcc" class="text-right tabular-nums"></span>
+                            </div>
+                        </div>
+                        <div class="rounded-lg border border-slate-200 p-3 space-y-1.5">
+                            <div class="text-[11px] text-slate-500">權重（更新前 → 更新後）</div>
+                            <table class="w-full text-xs tabular-nums">
+                                <thead><tr class="text-slate-400"><th class="text-left font-normal"></th><th class="text-right font-normal">更新前</th><th class="text-right font-normal">更新後</th></tr></thead>
+                                <tbody id="weightBody"></tbody>
+                            </table>
+                            <div id="updateNote" class="text-[11px] text-slate-600 leading-relaxed"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="logWrap" class="hidden">
+                    <div class="text-xs font-bold text-slate-600 mb-1.5">🔁 權重更新紀錄（最近 10 次，累計 <span id="logCount">0</span> 次）</div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-[11px] text-left">
+                            <thead><tr class="text-slate-500 border-b border-slate-200"><th class="py-1.5 pr-3 font-semibold">時間</th><th class="py-1.5 pr-3 font-semibold">輸入 (A, MPa)</th><th class="py-1.5 pr-3 font-semibold">預測→確認</th><th class="py-1.5 font-semibold">權重變化 (w1, w2, bias)</th></tr></thead>
+                            <tbody id="logBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 最近儲存案例 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🗃️ 最近儲存的維修案例</span>
+                    <span class="text-xs text-slate-500">儲存於 data/repair_log_entries.jsonl，不會自動併入 page08 的案例庫</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead><tr class="text-slate-500 border-b border-slate-200">
+                            <th class="py-2 pr-3 font-semibold">編號</th><th class="py-2 pr-3 font-semibold">設備</th><th class="py-2 pr-3 font-semibold">維修時間</th>
+                            <th class="py-2 pr-3 font-semibold">故障碼</th><th class="py-2 pr-3 font-semibold">電流／壓力</th><th class="py-2 pr-3 font-semibold">判定</th><th class="py-2 font-semibold">處置說明</th>
+                        </tr></thead>
+                        <tbody id="recentBody"><tr><td colspan="7" class="py-3 text-slate-400 italic">載入中...</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_12（欄位驗證）→ skill_13（感知器判定）</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未進行驗證...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const isNum = (n) => typeof n === 'number' && isFinite(n);
+        const fmt = (n, d = 2) => isNum(n) ? n.toFixed(d) : '--';
+        const sgn = (n, d = 3) => isNum(n) ? (n >= 0 ? '+' : '') + n.toFixed(d) : '--';
+        const show = (id, on) => $(id).classList.toggle('hidden', !on);
+        const FIELD_IDS = ['equipment_id', 'repair_datetime', 'error_code', 'current_a', 'pressure_mpa', 'description'];
+
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function nowLocal() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+
+        function fillExample() {
+            $('equipment_id').value = 'EQ-PRESS-01';
+            $('repair_datetime').value = nowLocal();
+            $('error_code').value = 'E-8021';
+            $('current_a').value = 45.2;
+            $('pressure_mpa').value = 2.1;
+            $('description').value = '更換馬達軸承並重新潤滑，試運轉 30 分鐘後溫度恢復正常。';
+            $('descCount').textContent = $('description').value.length + ' / 500';
+            document.querySelector('input[name="confirmed"][value=""]').checked = true;
+            FIELD_IDS.forEach((f) => { $('err_' + f).innerHTML = ''; $(f).classList.remove('border-rose-400'); });
+        }
+
+        function readForm() {
+            const numOrNull = (id) => { const v = $(id).value.trim(); return v === '' ? null : Number(v); };
+            const c = document.querySelector('input[name="confirmed"]:checked').value;
+            return {
+                equipment_id: $('equipment_id').value.trim(),
+                repair_datetime: $('repair_datetime').value,
+                error_code: $('error_code').value.trim(),
+                current_a: numOrNull('current_a'),
+                pressure_mpa: numOrNull('pressure_mpa'),
+                description: $('description').value,
+                confirmed_label: c === '' ? null : Number(c),
+            };
+        }
+
+        async function submit(save) {
+            const body = { ...readForm(), save };
+            $('algorithmStepsContainer').innerHTML = '';
+            $('loadingOverlay').classList.remove('hidden');
+            try {
+                const res = await fetch('/api/repair-log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.answer_text || '伺服器計算失敗 (HTTP ' + res.status + ')');
+                render(data);
+                loadRecent();
+            } catch (err) {
+                console.error(err);
+                alert('無法完成驗證：' + err.message + '\n請確認 app.py 是否正在運行。');
+            } finally {
+                $('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        function render(data) {
+            const v = data.validation || {}, p = data.perceptron, st = data.storage || {};
+            renderValidation(v, st);
+            // 感知器
+            const blocked = p && p.found === false;
+            show('guardCard', !!blocked);
+            if (blocked) {
+                $('guardMessage').textContent = '感知器判定被安全檢核攔截；欄位驗證結果仍然有效。';
+                $('guardList').innerHTML = (p.warnings || [p.answer_text]).map((w) => `<li>${esc(w)}</li>`).join('');
+            }
+            show('percSection', !!(p && p.found));
+            if (p && p.found) renderPerceptron(p);
+            if (p && p.data_source) $('dataSourceLabel').textContent = p.data_source;
+            renderSteps(data.steps || []);
+        }
+
+        function renderValidation(v, st) {
+            show('validSection', true);
+            const ok = !!v.is_valid;
+            const badge = $('validBadge');
+            badge.textContent = ok ? 'FIELD_VALIDATION_PASSED' : 'FIELD_VALIDATION_FAILED';
+            badge.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + (ok ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200');
+            $('validAnswer').textContent = v.answer_text || '';
+            const results = v.field_results || [];
+            $('fieldList').innerHTML = results.map((f) => `<li class="flex gap-1.5 ${f.ok ? 'text-emerald-800' : 'text-rose-700 font-semibold'}"><span>${f.ok ? '✔' : '✖'}</span><span><strong>${esc(f.label)}：</strong>${esc(f.message)}</span></li>`).join('');
+            $('validWarn').innerHTML = (v.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+            // 欄位旁的錯誤訊息
+            FIELD_IDS.forEach((f) => { $('err_' + f).innerHTML = ''; $(f).classList.remove('border-rose-400'); });
+            results.filter((f) => !f.ok).forEach((f) => {
+                if ($('err_' + f.field)) { $('err_' + f.field).innerHTML = `<span class="text-rose-600">✖ ${esc(f.message)}</span>`; $(f.field).classList.add('border-rose-400'); }
+            });
+            const box = $('storageBox');
+            if (st.requested) {
+                box.classList.remove('hidden');
+                const good = st.saved, dup = st.duplicate;
+                box.className = 'text-xs rounded-lg border px-3 py-2 ' + (good ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : dup ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-slate-50 border-slate-200 text-slate-600');
+                box.textContent = (good ? '💾 ' : dup ? '♻️ ' : 'ℹ️ ') + (st.message || '');
+            } else box.classList.add('hidden');
+        }
+
+        function renderPerceptron(p) {
+            const bad = p.validation_result === 1;
+            const badge = $('percBadge');
+            badge.textContent = (bad ? '🔴 ' : '🟢 ') + p.status_label;
+            badge.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + (bad ? 'bg-rose-50 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200');
+            $('percAnswer').textContent = p.answer_text || '';
+            $('percWarn').innerHTML = (p.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+            $('pScore').textContent = sgn(p.decision_score, 4);
+            $('pDist').textContent = fmt(Math.abs(p.distance_to_hyperplane), 3);
+            $('pZ').textContent = (p.z_scores || []).map((z) => sgn(z, 2)).join(', ');
+            $('pAcc').textContent = isNum(p.model_metrics.holdout_accuracy) ? (p.model_metrics.holdout_accuracy * 100).toFixed(1) + '%' : '--';
+            const b = p.weights_before, a = p.updated_weights, ch = p.weight_updated;
+            $('weightBody').innerHTML = [['w1（電流）', 'w1'], ['w2（壓力）', 'w2'], ['bias', 'bias']].map(([l, k]) =>
+                `<tr><td class="text-slate-600 py-0.5">${l}</td><td class="text-right">${sgn(b[k], 4)}</td><td class="text-right ${ch && a[k] !== b[k] ? 'font-bold text-purple-700' : ''}">${sgn(a[k], 4)}</td></tr>`).join('');
+            $('updateNote').textContent = p.update_note || '';
+            drawScatter(p.plot);
+            const log = p.update_log || [];
+            show('logWrap', log.length > 0);
+            $('logCount').textContent = p.n_updates;
+            $('logBody').innerHTML = log.slice().reverse().map((l) => `<tr class="border-b border-slate-100">
+                <td class="py-1.5 pr-3 whitespace-nowrap text-slate-600">${esc(l.time)}</td>
+                <td class="py-1.5 pr-3 tabular-nums">${fmt(l.features[0], 1)}, ${fmt(l.features[1], 2)}</td>
+                <td class="py-1.5 pr-3">${l.predicted} → ${l.confirmed}</td>
+                <td class="py-1.5 tabular-nums text-slate-600">${sgn(l.w_before.w1, 3)}, ${sgn(l.w_before.w2, 3)}, ${sgn(l.w_before.bias, 2)} → ${sgn(l.w_after.w1, 3)}, ${sgn(l.w_after.w2, 3)}, ${sgn(l.w_after.bias, 2)}</td></tr>`).join('');
+        }
+
+        function drawScatter(plot) {
+            const W = 520, H = 330, L = 52, R = 14, T = 14, B = 46;
+            const [x0, x1] = plot.x_range, [y0, y1] = plot.y_range;
+            const sx = (x) => L + (x - x0) / (x1 - x0) * (W - L - R);
+            const sy = (y) => H - B - (y - y0) / (y1 - y0) * (H - T - B);
+            let s = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="電流與壓力的感知器決策邊界散佈圖">
+                <defs><clipPath id="plotClip"><rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}"/></clipPath></defs>
+                <rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="#f8fafc" stroke="#e2e8f0"/>`;
+            for (let i = 0; i <= 4; i++) {
+                const xv = x0 + (x1 - x0) * i / 4, yv = y0 + (y1 - y0) * i / 4;
+                s += `<line x1="${sx(xv)}" y1="${T}" x2="${sx(xv)}" y2="${H - B}" stroke="#e2e8f0"/><text x="${sx(xv)}" y="${H - B + 14}" font-size="10" fill="#64748b" text-anchor="middle">${xv.toFixed(0)}</text>`;
+                s += `<line x1="${L}" y1="${sy(yv)}" x2="${W - R}" y2="${sy(yv)}" stroke="#e2e8f0"/><text x="${L - 6}" y="${sy(yv) + 3}" font-size="10" fill="#64748b" text-anchor="end">${yv.toFixed(1)}</text>`;
+            }
+            s += `<text x="${(L + W - R) / 2}" y="${H - 8}" font-size="11" fill="#475569" text-anchor="middle">即時電流 (A)</text>`;
+            s += `<text transform="translate(13 ${(T + H - B) / 2}) rotate(-90)" font-size="11" fill="#475569" text-anchor="middle">即時壓力 (MPa)</text>`;
+            s += '<g clip-path="url(#plotClip)">';
+            plot.points.forEach((p) => { s += `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.6" fill="${p.label ? '#f43f5e' : '#10b981'}" fill-opacity="0.55"/>`; });
+            if (plot.line) s += `<line x1="${sx(plot.line[0][0]).toFixed(1)}" y1="${sy(plot.line[0][1]).toFixed(1)}" x2="${sx(plot.line[1][0]).toFixed(1)}" y2="${sy(plot.line[1][1]).toFixed(1)}" stroke="#7c3aed" stroke-width="2" stroke-dasharray="6 3"/>`;
+            s += '</g>';
+            const px = sx(plot.point.x), py = sy(plot.point.y);
+            s += `<path d="M${px} ${py - 8} L${px + 8} ${py} L${px} ${py + 8} L${px - 8} ${py} Z" fill="#0f172a" stroke="#fff" stroke-width="1.5"/>`;
+            const flip = px > W - 150;
+            s += `<text x="${flip ? px - 12 : px + 12}" y="${py - 8}" font-size="11" font-weight="bold" fill="#0f172a" text-anchor="${flip ? 'end' : 'start'}">本次輸入</text>`;
+            s += `<text x="${L + 6}" y="${T + 14}" font-size="10" fill="#7c3aed">虛線＝決策邊界 (score = 0)</text></svg>`;
+            $('scatter').innerHTML = s;
+        }
+
+        function renderSteps(steps) {
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            box.innerHTML = steps.map((s) => `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`).join('');
+        }
+
+        async function loadRecent() {
+            try {
+                const res = await fetch('/api/repair-log/recent?limit=8');
+                const data = await res.json();
+                const rows = data.entries || [];
+                $('recentBody').innerHTML = rows.length ? rows.map((r) => {
+                    const lab = r.verdict && r.verdict.status_label;
+                    const cls = lab === 'NON_COMPLIANT' ? 'bg-rose-100 text-rose-800 border-rose-200' : lab === 'COMPLIANT' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200';
+                    return `<tr class="border-b border-slate-100 align-top">
+                        <td class="py-2 pr-3 font-semibold whitespace-nowrap">${esc(r.entry_id)}</td><td class="py-2 pr-3 whitespace-nowrap">${esc(r.equipment_id)}</td>
+                        <td class="py-2 pr-3 whitespace-nowrap">${esc((r.repair_datetime || '').replace('T', ' '))}</td><td class="py-2 pr-3">${esc(r.error_code)}</td>
+                        <td class="py-2 pr-3 tabular-nums whitespace-nowrap">${esc(r.current_a)} A / ${esc(r.pressure_mpa)} MPa</td>
+                        <td class="py-2 pr-3"><span class="inline-block px-2 py-0.5 rounded border ${cls}">${esc(lab || '未判定')}</span></td>
+                        <td class="py-2 text-slate-600">${esc(r.description)}</td></tr>`;
+                }).join('') : '<tr><td colspan="7" class="py-3 text-slate-400 italic">尚未儲存任何案例</td></tr>';
+            } catch (e) {
+                $('recentBody').innerHTML = '<tr><td colspan="7" class="py-3 text-rose-600">無法載入最近案例</td></tr>';
+            }
+        }
+
+        async function resetModel() {
+            if (!confirm('確定要把感知器還原為初始訓練結果嗎？已學習的權重與更新紀錄會被清除。')) return;
+            $('loadingOverlay').classList.remove('hidden');
+            try {
+                const res = await fetch('/api/repair-log/reset-model', { method: 'POST' });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.answer_text || 'HTTP ' + res.status);
+                alert('已還原。初始權重：w1=' + data.updated_weights.w1 + '、w2=' + data.updated_weights.w2 + '、bias=' + data.updated_weights.bias);
+                show('percSection', false);
+            } catch (err) { alert('還原失敗：' + err.message); }
+            finally { $('loadingOverlay').classList.add('hidden'); }
+        }
+
+        $('description').addEventListener('input', () => { $('descCount').textContent = $('description').value.length + ' / 500'; });
+        $('saveBtn').addEventListener('click', () => submit(true));
+        $('checkBtn').addEventListener('click', () => submit(false));
+        $('fillBtn').addEventListener('click', fillExample);
+        $('resetModelBtn').addEventListener('click', resetModel);
+        $('repair_datetime').max = nowLocal();
+        loadRecent();
+    </script>
+</body>
+</html>

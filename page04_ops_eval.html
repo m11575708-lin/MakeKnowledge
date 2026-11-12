@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>04. 製造知識庫維運與回答品質評估頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xs border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span id="overlayText" class="text-sm font-semibold tracking-wide">處理中，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 頂部 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">製造知識庫維運與回答品質評估</h1>
+                    <p class="text-xs text-slate-500">系統頁面：04. 製造知識庫維運與回答品質評估頁 (/knowledge/ops-eval) | US-19</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span id="roleBadge" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">👤 角色：確認中…</span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">🤖 MCP Tools：skill_28 / 29</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6 min-w-0">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>顯示內容：</strong><span id="resultTime">尚無結果</span></span>
+                    <span>🧮 <strong>機制：</strong>落後月數＋指數衰減；Hit@3 與 MRR（標準問答）</span>
+                </div>
+                <div id="authWarn" class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium hidden"></div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>新鮮度只檢查「資料有多舊」，無法判斷內容是否符合現行法規，法規是否修訂請對照官方公告。
+                    日期依據不是「資料內日期」的資料集（檔案修改時間、匯入時間）可信度較低，已逐列標示。
+                    命中率只評估<strong>檢索</strong>（skill_01 找文件的能力），不評估 AnythingLLM 產生的回答是否正確；
+                    找不到標準題庫 <code>data/eval/gold_20.json</code> 時，題目由 docs/ 自動產生，命中率會被高估，只代表系統接線正常。
+                    頁面數字皆為計算結果，無法在畫面上修改，要改請調整資料後重新檢查。
+                </div>
+            </section>
+
+            <!-- 控制列 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div>
+                        <label for="tokenInput" class="block text-sm font-semibold text-slate-800 mb-1.5">存取權杖（伺服器有設定時才需要）</label>
+                        <div class="flex gap-2">
+                            <input id="tokenInput" type="password" autocomplete="off" placeholder="只保存在這個分頁的記憶體"
+                                   class="flex-1 min-w-0 px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                            <button id="tokenBtn" type="button" class="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg cursor-pointer">驗證</button>
+                        </div>
+                    </div>
+                    <div id="roleHint" class="text-xs text-slate-500"></div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+                    <div>
+                        <label for="todayInput" class="block text-sm font-semibold text-slate-800 mb-1.5">基準日</label>
+                        <input id="todayInput" type="date" min="2000-01-01" max="2100-12-31"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label for="lagInput" class="block text-sm font-semibold text-slate-800 mb-1.5">落後門檻（月）</label>
+                        <input id="lagInput" type="number" min="0" max="120" step="1" value="3"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label for="lambdaInput" class="block text-sm font-semibold text-slate-800 mb-1.5">衰減係數 λ</label>
+                        <input id="lambdaInput" type="number" min="0" max="2" step="0.05" value="0.1"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button id="freshBtn" type="button" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg shadow-xs cursor-pointer">立即檢查</button>
+                    <button id="evalBtn" type="button" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg shadow-xs cursor-pointer">執行命中率測試</button>
+                </div>
+            </section>
+
+            <!-- Guardrail 卡 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">🛡️ 安全檢核攔截 (Guardrail)</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 新鮮度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🕒 資料新鮮度 <span class="text-[11px] font-normal text-slate-400">#SK-28</span></span>
+                    <span id="freshBadge" class="px-3 py-1 font-semibold text-xs rounded-full border bg-slate-100 text-slate-500 border-slate-200">尚未檢查</span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="kpiCards"></div>
+                <ul id="expireList" class="list-disc pl-5 text-xs text-amber-800 space-y-0.5 hidden"></ul>
+                <ul id="freshWarnList" class="list-disc pl-5 text-xs text-slate-500 space-y-0.5 hidden"></ul>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs border border-slate-200">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr><th class="text-left p-2">資料集</th><th class="text-left p-2">最新日期</th><th class="text-left p-2">日期依據</th><th class="text-right p-2">落後月數</th><th class="text-left p-2">權重 W(t)</th><th class="text-left p-2">狀態</th><th class="text-left p-2">最近一次匯入／發佈</th></tr>
+                        </thead>
+                        <tbody id="dsRows"><tr><td colspan="7" class="p-3 text-slate-400 italic">尚未檢查，請按「立即檢查」</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 品質指標 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🎯 檢索品質 <span class="text-[11px] font-normal text-slate-400">#SK-29</span></span>
+                    <span id="goldBadge" class="px-3 py-1 font-semibold text-xs rounded-full border bg-slate-100 text-slate-500 border-slate-200">尚未測試</span>
+                </div>
+                <p id="evalAnswer" class="text-sm text-slate-700"></p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="qualityCards"></div>
+                <ul id="evalWarnList" class="list-disc pl-5 text-xs text-amber-800 space-y-0.5 hidden"></ul>
+                <div id="perQBox" class="hidden space-y-2">
+                    <div class="text-xs font-semibold text-slate-600">逐題名次</div>
+                    <div id="perQ" class="flex flex-wrap gap-1.5"></div>
+                    <div class="flex flex-wrap gap-3 text-[11px] text-slate-500">
+                        <span><span class="inline-block w-3 h-3 rounded bg-emerald-500 align-middle"></span> 第 1 名</span>
+                        <span><span class="inline-block w-3 h-3 rounded bg-sky-500 align-middle"></span> 前 3 名</span>
+                        <span><span class="inline-block w-3 h-3 rounded bg-amber-400 align-middle"></span> 有結果但沒進前 3</span>
+                        <span><span class="inline-block w-3 h-3 rounded bg-rose-500 align-middle"></span> 查無資料</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 錯誤案例 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🚩 錯誤案例</span>
+                    <span id="errSummary" class="text-xs text-slate-500"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs border border-slate-200">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr><th class="text-left p-2">題號</th><th class="text-left p-2">提問</th><th class="text-left p-2">預期來源</th><th class="text-left p-2">實際檢索結果</th><th class="text-left p-2">錯誤類別</th></tr>
+                        </thead>
+                        <tbody id="errRows"><tr><td colspan="5" class="p-3 text-slate-400 italic">尚未測試</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 限制說明 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-2 text-xs text-slate-600">
+                <div class="text-sm font-bold text-slate-900">📝 限制說明</div>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li>落後月數＝基準日與最新日期的日曆月差（例：最新 2026-06、基準日 2026-11-11 → 5 個月；權重 e<sup>−0.1×5</sup> ≈ 0.61）。超過門檻才提醒，剛好等於門檻不提醒。</li>
+                    <li>沒有日期欄的 CSV 只能用檔案修改時間，代表「檔案多久沒更新」，不是資料本身的時間；未放入檔案、使用合成示範資料者標為「無法判斷」，不算需更新。</li>
+                    <li>MRR 只看前 10 名（<code>MRR@10</code>）：名次超過 10 或被 Guardrail 擋下記 0。第 1 名命中率＝skill_01 回答引用到預期來源的比例。</li>
+                    <li>題數少時數字很不穩，所以同時給 Hit@3 的 Wilson 95% 區間與 MRR 的 bootstrap 95% 區間，以及「隨機排序」基準；文件數 ≤ 3 時 Hit@3 幾乎必然命中、鑑別力很低。</li>
+                    <li>權限：管理者可重新檢查與重跑測試；廠長（唯讀）只能看最近一次的結果。重跑會覆蓋 <code>data/data_freshness_result.json</code> 與 <code>data/retrieval_quality_result.json</code>。</li>
+                </ul>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_28（新鮮度）、skill_29（檢索品質）</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未執行...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const isNum = (n) => typeof n === 'number' && isFinite(n);
+        const show = (id, on) => $(id).classList.toggle('hidden', !on);
+
+        const BASIS = {
+            data: ['資料內日期', 'bg-emerald-50 text-emerald-700 border-emerald-200'],
+            file_mtime: ['檔案修改時間', 'bg-amber-50 text-amber-700 border-amber-200'],
+            import_time: ['匯入時間', 'bg-amber-50 text-amber-700 border-amber-200'],
+            none: ['無法判斷', 'bg-slate-100 text-slate-500 border-slate-200'],
+        };
+        const DS_STATUS = {
+            fresh: ['正常', 'bg-emerald-50 text-emerald-700 border-emerald-200'],
+            stale: ['需更新', 'bg-amber-100 text-amber-800 border-amber-300'],
+            unknown: ['無法判斷', 'bg-slate-100 text-slate-500 border-slate-200'],
+        };
+        const FRESH_BADGE = {
+            '正常': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            '需更新': 'bg-amber-100 text-amber-800 border-amber-300',
+            '無法判斷': 'bg-slate-100 text-slate-500 border-slate-200',
+        };
+        const ERR_BADGE = { '查無資料': 'bg-rose-50 text-rose-700 border-rose-200', '偏離': 'bg-amber-50 text-amber-800 border-amber-200' };
+
+        let token = '';
+        let role = null;
+        let saved = { freshness: null, eval: null };   // 目前畫面上的兩份結果
+
+        const hdr = (json) => {
+            const h = {};
+            if (json) h['Content-Type'] = 'application/json';
+            if (token) h['X-Import-Token'] = token;
+            return h;
+        };
+        const overlay = (on, text) => { if (text) $('overlayText').textContent = text; show('loadingOverlay', on); };
+        function guard(message, list) {
+            show('guardCard', !!message);
+            $('guardMessage').textContent = message || '';
+            $('guardList').innerHTML = (list || []).map((x) => `<li>${esc(x)}</li>`).join('');
+        }
+        function bullets(id, list) {
+            $(id).innerHTML = (list || []).map((x) => `<li>${esc(x)}</li>`).join('');
+            show(id, !!(list && list.length));
+        }
+        const card = (label, value, sub, tone) => {
+            const cls = tone === 'warn' ? 'bg-amber-50 border-amber-200' : tone === 'bad' ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-200';
+            return `<div class="${cls} border rounded-lg p-3"><div class="text-[11px] text-slate-500">${label}</div>
+                <div class="text-xl font-bold text-slate-900 tabular-nums break-words">${value}</div>${sub ? `<div class="text-[11px] text-slate-500 mt-0.5">${sub}</div>` : ''}</div>`;
+        };
+
+        // ---------- 權限 ----------
+        async function loadSession() {
+            try {
+                const res = await fetch('/api/ops/session', { headers: hdr(false) });
+                const d = await res.json();
+                role = d.role;
+                const names = { admin: '管理者', viewer: '廠長（唯讀）' };
+                const b = $('roleBadge');
+                b.textContent = '👤 角色：' + (names[role] || '未授權');
+                b.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ' +
+                    (role === 'admin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : role === 'viewer' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-rose-50 text-rose-700 border-rose-200');
+                const canRun = role === 'admin';
+                ['freshBtn', 'evalBtn'].forEach((id) => { $(id).disabled = !canRun; });
+                $('roleHint').textContent = canRun ? '' : (role === 'viewer' ? '唯讀：只能看最近一次的結果，不能重新檢查。' : '尚未取得權限，請輸入權杖後按「驗證」。');
+                const w = $('authWarn');
+                if (!d.auth_required) {
+                    w.textContent = '🔓 伺服器尚未設定 IMPORT_ADMIN_TOKEN / OPS_VIEW_TOKEN，目前任何能連到這個網址的人都是管理者。僅限本機開發使用，部署前請設定環境變數。';
+                    w.classList.remove('hidden');
+                } else {
+                    w.classList.add('hidden');
+                }
+                return d;
+            } catch (err) {
+                guard('無法連線到後端：' + err.message);
+                return null;
+            }
+        }
+
+        // ---------- 新鮮度 ----------
+        function renderFreshness(r) {
+            saved.freshness = r;
+            const fb = $('freshBadge');
+            fb.textContent = r.data_freshness_status || '--';
+            fb.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + (FRESH_BADGE[r.data_freshness_status] || FRESH_BADGE['無法判斷']);
+            const fresh = r.data_freshness_status;
+            $('kpiCards').innerHTML =
+                card('資料新鮮度', esc(fresh || '--'), r.params && r.params.today ? `基準日 ${esc(r.params.today)}` : '', fresh === '需更新' ? 'warn' : '') +
+                card('落後超過門檻', isNum(r.stale_count) ? `${r.stale_count} <span class="text-xs font-normal text-slate-500">個資料集</span>` : '--',
+                     r.params && isNum(r.params.max_lag_months) ? `門檻 ${r.params.max_lag_months} 個月` : '', r.stale_count > 0 ? 'warn' : '') +
+                card('新鮮度指數', isNum(r.freshness_index) ? r.freshness_index.toFixed(3) : '--', `平均 W(t)；無法判斷 ${isNum(r.unknown_count) ? r.unknown_count : '--'} 個`) +
+                card('系統版本', esc(r.system_version || '--'), '');
+            bullets('expireList', r.expiration_warning);
+            bullets('freshWarnList', r.warnings);
+            const rows = (r.datasets || []).map((d) => {
+                const bs = BASIS[d.date_basis] || BASIS.none;
+                const st = DS_STATUS[d.status] || DS_STATUS.unknown;
+                const w = isNum(d.weight) ? d.weight : null;
+                const bar = w === null ? '<span class="text-slate-400">--</span>' :
+                    `<div class="flex items-center gap-2"><div class="w-16 h-1.5 bg-slate-200 rounded"><div class="h-1.5 rounded ${d.warning ? 'bg-amber-500' : 'bg-emerald-500'}" style="width:${Math.round(w * 100)}%"></div></div><span class="tabular-nums">${w.toFixed(3)}</span></div>`;
+                const ev = d.last_event;
+                let evTxt = '<span class="text-slate-400">--</span>';
+                if (ev) {
+                    const ok = ev.status === 'ok' || ev.status === 'imported' || ev.status === 'success';
+                    const label = ev.type === 'publish' ? `發佈${ev.status === 'ok' ? '成功' : '失敗'}` : `匯入${ev.status === 'failed' ? '失敗' : ev.status === 'duplicate_file' ? '（整檔重複）' : '完成'}`;
+                    evTxt = `<span class="${ev.status === 'failed' ? 'text-rose-700' : ok ? 'text-slate-700' : 'text-slate-700'}">${esc(label)}</span>
+                        <div class="text-[11px] text-slate-400">${esc((ev.at || '').replace('T', ' '))}${ev.file ? ' · ' + esc(ev.file) : ''}${ev.reason ? ' · ' + esc(ev.reason) : ''}</div>`;
+                }
+                return `<tr class="border-t border-slate-100 align-top ${d.warning ? 'bg-amber-50' : ''}">
+                    <td class="p-2"><div class="font-medium text-slate-800">${esc(d.name)}</div><div class="text-[11px] text-slate-400 break-all">${esc(d.source)} · ${d.n_records ?? 0} 筆${d.note ? ' · ' + esc(d.note) : ''}</div></td>
+                    <td class="p-2 whitespace-nowrap tabular-nums">${esc(d.latest || '--')}${d.future ? ' <span class="text-rose-600" title="晚於基準日">⚠</span>' : ''}</td>
+                    <td class="p-2"><span class="px-1.5 py-0.5 rounded border whitespace-nowrap ${bs[1]}">${bs[0]}</span></td>
+                    <td class="p-2 text-right tabular-nums ${d.warning ? 'font-bold text-amber-800' : ''}">${isNum(d.lag_months) ? d.lag_months : '--'}</td>
+                    <td class="p-2">${bar}</td>
+                    <td class="p-2"><span class="px-1.5 py-0.5 rounded border whitespace-nowrap ${st[1]}">${st[0]}</span></td>
+                    <td class="p-2">${evTxt}</td></tr>`;
+            }).join('');
+            $('dsRows').innerHTML = rows || '<tr><td colspan="7" class="p-3 text-slate-400 italic">沒有資料集</td></tr>';
+            if (r.params && r.params.today) {
+                $('todayInput').value = r.params.today;
+                $('lagInput').value = r.params.max_lag_months;
+                $('lambdaInput').value = r.params.decay_lambda;
+            }
+        }
+
+        // ---------- 檢索品質 ----------
+        function renderEval(r) {
+            saved.eval = r;
+            const gb = $('goldBadge');
+            if (r.found === false) {
+                gb.textContent = '未完成'; gb.className = 'px-3 py-1 font-semibold text-xs rounded-full border bg-rose-50 text-rose-700 border-rose-200';
+                $('evalAnswer').textContent = r.answer_text || '';
+                $('qualityCards').innerHTML = '';
+                show('perQBox', false);
+                bullets('evalWarnList', r.warnings);
+                $('errRows').innerHTML = '<tr><td colspan="5" class="p-3 text-slate-400 italic">測試未完成</td></tr>';
+                $('errSummary').textContent = '';
+                return;
+            }
+            const auto = r.gold && r.gold.auto_generated;
+            gb.textContent = auto ? '題庫：自動產生（僅檢查接線）' : `題庫：${r.gold && r.gold.path ? r.gold.path : '檔案'}`;
+            gb.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + (auto ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-emerald-50 text-emerald-700 border-emerald-200');
+            $('evalAnswer').textContent = r.answer_text || '';
+            const ci = (a, unit) => Array.isArray(a) ? `95% 區間 ${a[0]}–${a[1]}${unit}` : '';
+            const base = r.random_baseline || {};
+            $('qualityCards').innerHTML =
+                card(`Top-${r.top_k} 命中率`, `${r.hit_rate_top3_pct}<span class="text-xs font-normal text-slate-500">%</span>`, `${r.n_hits}/${r.n_valid} 題 · ${ci(r.hit_rate_ci95_pct, '%')}`) +
+                card(`MRR@${r.mrr_cutoff}`, isNum(r.mrr) ? r.mrr.toFixed(3) : '--', ci(r.mrr_ci95, '')) +
+                card('引用正確來源', `${r.source_citation_correct_pct}<span class="text-xs font-normal text-slate-500">%</span>`, '第 1 名就是預期來源') +
+                card('隨機排序基準', `${base.hit_rate_pct ?? '--'}<span class="text-xs font-normal text-slate-500">%</span>`, `MRR ${isNum(base.mrr) ? base.mrr.toFixed(3) : '--'} · 語料 ${r.corpus_size} 份`);
+            bullets('evalWarnList', r.warnings);
+            $('perQ').innerHTML = (r.per_question || []).map((p) => {
+                const cls = p.rank === 1 ? 'bg-emerald-500' : p.hit ? 'bg-sky-500' : p.rank ? 'bg-amber-400' : (p.top_score !== null && p.top_score !== undefined && (r.error_cases_list || []).some((e) => e.qid === p.qid && e.error_type === '偏離') ? 'bg-amber-400' : 'bg-rose-500');
+                const t = p.rank ? `${p.qid}：第 ${p.rank} 名` : `${p.qid}：未找到`;
+                return `<span title="${esc(t)}" class="${cls} text-white text-[10px] font-semibold rounded px-1.5 py-1 tabular-nums">${esc(p.qid)}${p.rank ? ' · ' + p.rank : ''}</span>`;
+            }).join('');
+            show('perQBox', (r.per_question || []).length > 0);
+            const es = r.error_summary || {};
+            $('errSummary').textContent = `共 ${(r.error_cases_list || []).length} 題未命中：查無資料 ${es['查無資料'] ?? 0}、偏離 ${es['偏離'] ?? 0}`;
+            $('errRows').innerHTML = (r.error_cases_list || []).map((e) => `
+                <tr class="border-t border-slate-100 align-top">
+                    <td class="p-2 whitespace-nowrap">${esc(e.qid)}</td><td class="p-2">${esc(e.query)}</td>
+                    <td class="p-2 break-all">${esc(e.expected)}</td><td class="p-2">${esc(e.actual)}</td>
+                    <td class="p-2"><span class="px-1.5 py-0.5 rounded border whitespace-nowrap ${ERR_BADGE[e.error_type] || ''}">${esc(e.error_type)}</span></td></tr>`).join('')
+                || '<tr><td colspan="5" class="p-3 text-emerald-700">所有題目都命中前 ' + esc(r.top_k) + ' 名。</td></tr>';
+        }
+
+        // ---------- 步驟日誌 ----------
+        function renderSteps() {
+            const steps = [].concat((saved.freshness && saved.freshness.steps) || [], (saved.eval && saved.eval.steps) || []);
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">尚未執行...</div>'; return; }
+            let last = '';
+            box.innerHTML = steps.map((s) => {
+                const head = s.skill_name !== last ? `<div class="text-xs font-bold text-blue-800 pt-1">▸ ${esc(s.skill_name)}</div>` : '';
+                last = s.skill_name;
+                return head + `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`;
+            }).join('');
+        }
+
+        function updateTime() {
+            const parts = [];
+            if (saved.freshness && saved.freshness.generated_at) parts.push('新鮮度 ' + saved.freshness.generated_at.replace('T', ' '));
+            if (saved.eval && saved.eval.generated_at) parts.push('命中率 ' + saved.eval.generated_at.replace('T', ' '));
+            $('resultTime').textContent = parts.length ? '結果產生於 ' + parts.join('、') : '尚無結果';
+        }
+
+        // ---------- 載入最近一次結果（唯讀） ----------
+        async function loadLast() {
+            if (!role) return;
+            try {
+                const res = await fetch('/api/ops/last', { headers: hdr(false) });
+                const d = await res.json();
+                if (!res.ok) { guard(d.answer_text || `無法讀取結果（HTTP ${res.status}）`); return; }
+                if (d.freshness) renderFreshness(d.freshness);
+                if (d.eval) renderEval(d.eval);
+                updateTime(); renderSteps();
+            } catch (err) {
+                guard('無法連線到後端：' + err.message);
+            }
+        }
+
+        // ---------- 動作 ----------
+        async function post(url, body, text) {
+            overlay(true, text);
+            guard('');
+            try {
+                const res = await fetch(url, { method: 'POST', headers: hdr(true), body: JSON.stringify(body) });
+                const d = await res.json();
+                if (!res.ok || d.status === 'error') { guard(d.answer_text || `執行失敗（HTTP ${res.status}）`); return null; }
+                return d;
+            } catch (err) {
+                guard('無法連線到後端：' + err.message);
+                return null;
+            } finally {
+                overlay(false);
+            }
+        }
+
+        async function runFreshness() {
+            const today = $('todayInput').value;
+            const lag = Number($('lagInput').value), lam = Number($('lambdaInput').value);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) { guard('請選擇基準日。'); return; }
+            if (!Number.isInteger(lag) || lag < 0 || lag > 120) { guard('落後門檻需為 0–120 的整數（月）。'); return; }
+            if (!isFinite(lam) || lam < 0 || lam > 2) { guard('衰減係數 λ 需介於 0–2。'); return; }
+            const d = await post('/api/ops/freshness', { today, max_lag_months: lag, decay_lambda: lam }, '正在檢查各資料集的最新日期...');
+            if (!d) return;
+            const r = d.freshness;
+            if (r.found === false) {
+                guard(r.answer_text || '檢查被攔截', r.warnings);
+                saved.freshness = r; renderSteps(); return;
+            }
+            renderFreshness(r); updateTime(); renderSteps();
+        }
+
+        async function runEval() {
+            const d = await post('/api/ops/eval', { top_k: 3, threshold: 0.10 }, '正在逐題呼叫 skill_01 檢索，請稍候...');
+            if (!d) return;
+            const r = d.eval;
+            if (r.found === false) guard(r.answer_text || '測試被攔截', r.warnings);
+            renderEval(r); updateTime(); renderSteps();
+        }
+
+        $('freshBtn').addEventListener('click', runFreshness);
+        $('evalBtn').addEventListener('click', runEval);
+        $('tokenBtn').addEventListener('click', async () => { token = $('tokenInput').value.trim(); guard(''); await loadSession(); await loadLast(); });
+
+        (function init() {
+            const t = new Date();
+            $('todayInput').value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+            loadSession().then(loadLast);
+        })();
+    </script>
+</body>
+</html>

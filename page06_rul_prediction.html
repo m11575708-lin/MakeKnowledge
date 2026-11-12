@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>06. 設備壽命預測頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xl border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm font-semibold tracking-wide">正在標準化數據並以 OLS 模型計算剩餘壽命，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 頂部導覽 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">設備壽命預測 (RUL)</h1>
+                    <p class="text-xs text-slate-500">系統頁面：06. 設備壽命預測頁 (/equipment/rul-prediction) | US-03</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                    👤 角色：設備維修工程師
+                </span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                    🤖 MCP Tools：skill_03 / 04 / 05
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>模型資料來源：</strong><span id="dataSourceLabel">尚未執行預測</span></span>
+                    <span>🧮 <strong>演算法：</strong>多元線性迴歸 (OLS 最小平方法)</span>
+                </div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>預測值僅供維修排程參考。未放入真實歷史資料 (data/sensor_history.csv) 時，模型以示範合成資料訓練，數值不代表任何實際設備。
+                </div>
+            </section>
+
+            <!-- 設備選擇與感測器輸入 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+                    <div class="space-y-1.5">
+                        <label for="equipmentSelect" class="block text-sm font-semibold text-slate-800">設備 ID</label>
+                        <select id="equipmentSelect" class="px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500 min-w-56">
+                            <option value="EQ-PRESS-01">EQ-PRESS-01 衝壓機 1 號</option>
+                            <option value="EQ-SHEAR-02">EQ-SHEAR-02 剪切機 2 號</option>
+                            <option value="EQ-LIFT-03">EQ-LIFT-03 升降機 3 號</option>
+                        </select>
+                    </div>
+                    <p class="text-xs text-slate-500 sm:pb-2.5">切換設備會帶入該設備的典型工況，之後可自行調整。模型為全廠共用，不區分設備。</p>
+                </div>
+
+                <div id="sensorFields" class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5"></div>
+
+                <div class="flex flex-wrap gap-2 pt-1">
+                    <button id="runBtn" type="button" class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-medium text-sm rounded-lg transition-colors shadow-xs cursor-pointer">
+                        執行 RUL 壽命預測
+                    </button>
+                    <button id="resetBtn" type="button" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-lg border border-slate-200 transition-colors cursor-pointer">
+                        還原預設值
+                    </button>
+                </div>
+            </section>
+
+            <!-- Guardrail / 未命中卡片 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">⚠️ 安全檢核提示（Guardrail 防呆觸發）</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 結果區 -->
+            <section id="resultSection" class="space-y-6 hidden">
+
+                <!-- 剩餘壽命儀表 + 評估指標 -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                        <div class="flex items-center justify-between flex-wrap gap-2">
+                            <span class="text-sm font-bold text-slate-900">⏳ 預估剩餘使用壽命 (RUL)</span>
+                            <span id="healthBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                        </div>
+                        <div class="flex items-baseline gap-2 flex-wrap">
+                            <span id="rulValue" class="text-5xl font-bold text-slate-900 tabular-nums">--</span>
+                            <span class="text-base text-slate-500">小時</span>
+                            <span id="rulDays" class="text-sm text-slate-400"></span>
+                        </div>
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs text-slate-500">
+                                <span>設備健康度</span><span id="healthPct"></span>
+                            </div>
+                            <div class="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                                <div id="healthBar" class="h-full rounded-full transition-all duration-500" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <p id="intervalText" class="text-xs text-slate-500"></p>
+                        <p id="answerText" class="text-sm text-slate-700 leading-relaxed"></p>
+                        <ul id="warnList" class="list-disc pl-5 text-xs text-amber-700 space-y-0.5"></ul>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                        <div class="text-sm font-bold text-slate-900">📏 模型評估指標</div>
+                        <p class="text-[11px] text-slate-400 -mt-1">以未參與訓練的測試集計算</p>
+                        <dl class="space-y-2 text-sm">
+                            <div class="flex justify-between"><dt class="text-slate-500">MAE</dt><dd id="mMae" class="font-semibold tabular-nums"></dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">RMSE</dt><dd id="mRmse" class="font-semibold tabular-nums"></dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">R²</dt><dd id="mR2" class="font-semibold tabular-nums"></dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">訓練 / 測試筆數</dt><dd id="mN" class="font-semibold tabular-nums"></dd></div>
+                        </dl>
+                    </div>
+                </div>
+
+                <!-- 衰退曲線 -->
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <span class="text-sm font-bold text-slate-900">📉 設備健康度衰退趨勢</span>
+                        <span class="text-xs text-slate-500">其他參數固定為目前輸入，只改變運轉時數</span>
+                    </div>
+                    <div id="curveBox" class="w-full overflow-x-auto"></div>
+                </div>
+
+                <!-- 迴歸係數與貢獻度 -->
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <span class="text-sm font-bold text-slate-900">🔬 OLS 迴歸係數與本次衰退貢獻度</span>
+                        <span id="baselineText" class="text-xs text-slate-500"></span>
+                    </div>
+                    <p id="attrText" class="text-sm text-slate-700"></p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead>
+                                <tr class="text-slate-500 border-b border-slate-200">
+                                    <th class="py-2 pr-3 font-semibold">參數</th>
+                                    <th class="py-2 pr-3 font-semibold text-right">輸入值</th>
+                                    <th class="py-2 pr-3 font-semibold text-right">係數 (每單位)</th>
+                                    <th class="py-2 pr-3 font-semibold text-right">z 分數</th>
+                                    <th class="py-2 pr-3 font-semibold text-right">貢獻 (h)</th>
+                                    <th class="py-2 font-semibold w-40">影響佔比</th>
+                                </tr>
+                            </thead>
+                            <tbody id="coefBody"></tbody>
+                        </table>
+                    </div>
+                    <p class="text-[11px] text-slate-400">貢獻 = 標準化係數 × z 分數，為相對「全部參數都在平均值」基準的壽命增減；負值表示加速衰退。</p>
+                </div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_03 → skill_04 → skill_05</span>
+                </div>
+
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未進行預測...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const FIELDS = [
+            { key: 'operating_hours', label: '累積運轉時數', unit: 'h',    min: 0,  max: 4000, step: 10,  hint: '訓練資料約 200–2500 h' },
+            { key: 'vibration',       label: '設備振動值',   unit: 'mm/s', min: 0,  max: 8,    step: 0.1, hint: '訓練資料約 0.5–5.0' },
+            { key: 'temperature',     label: '運轉溫度',     unit: '°C',   min: 20, max: 120,  step: 1,   hint: '訓練資料約 45–90' },
+            { key: 'load_rate',       label: '負載率',       unit: '%',    min: 0,  max: 120,  step: 1,   hint: '訓練資料約 50–95' },
+        ];
+        const PRESETS = {
+            'EQ-PRESS-01': { operating_hours: 1500, vibration: 2.8, temperature: 75, load_rate: 85 },
+            'EQ-SHEAR-02': { operating_hours: 900,  vibration: 1.6, temperature: 62, load_rate: 70 },
+            'EQ-LIFT-03':  { operating_hours: 2200, vibration: 4.2, temperature: 82, load_rate: 90 },
+        };
+        const HEALTH_STYLE = {
+            GREEN:  { text: '🟢 GREEN 良好',  badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', bar: '#10b981' },
+            YELLOW: { text: '🟡 YELLOW 注意', badge: 'bg-amber-100 text-amber-800 border-amber-200',     bar: '#f59e0b' },
+            RED:    { text: '🔴 RED 危急',    badge: 'bg-rose-100 text-rose-800 border-rose-200',        bar: '#f43f5e' },
+        };
+
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const fmt = (n, d = 1) => (typeof n === 'number' && isFinite(n)) ? n.toFixed(d) : '--';
+
+        function buildFields() {
+            const box = $('sensorFields');
+            box.innerHTML = FIELDS.map((f) => `
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <label for="num_${f.key}" class="text-sm font-semibold text-slate-800">${f.label}</label>
+                        <div class="flex items-center gap-1.5">
+                            <input id="num_${f.key}" type="number" min="${f.min}" max="${f.max}" step="${f.step}"
+                                class="w-24 px-2 py-1.5 border border-slate-300 rounded-md text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                            <span class="text-xs text-slate-500 w-9">${f.unit}</span>
+                        </div>
+                    </div>
+                    <input id="rng_${f.key}" type="range" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}" class="w-full accent-sky-600 cursor-pointer">
+                    <div class="text-[11px] text-slate-400">${f.hint}</div>
+                </div>`).join('');
+
+            FIELDS.forEach((f) => {
+                const num = $('num_' + f.key), rng = $('rng_' + f.key);
+                rng.addEventListener('input', () => { num.value = rng.value; });
+                num.addEventListener('input', () => { if (num.value !== '') rng.value = num.value; });
+            });
+        }
+
+        function applyPreset(id) {
+            const p = PRESETS[id] || PRESETS['EQ-PRESS-01'];
+            FIELDS.forEach((f) => { $('num_' + f.key).value = p[f.key]; $('rng_' + f.key).value = p[f.key]; });
+        }
+
+        function readValues() {
+            const out = {};
+            for (const f of FIELDS) {
+                const raw = $('num_' + f.key).value.trim();
+                if (raw === '' || !isFinite(Number(raw))) {
+                    alert(`請輸入有效的「${f.label}」數值`);
+                    $('num_' + f.key).focus();
+                    return null;
+                }
+                out[f.key] = Number(raw);
+            }
+            return out;
+        }
+
+        async function runPrediction() {
+            const values = readValues();
+            if (!values) return;
+            $('algorithmStepsContainer').innerHTML = '';
+            $('loadingOverlay').classList.remove('hidden');
+            try {
+                const res = await fetch('/api/rul-predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ equipment_id: $('equipmentSelect').value, ...values }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.answer_text || '伺服器計算失敗 (HTTP ' + res.status + ')');
+                render(data);
+            } catch (err) {
+                console.error(err);
+                alert('無法完成預測：' + err.message + '\n請確認 app.py 是否正在運行。');
+            } finally {
+                $('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        function sourceLabel(src) {
+            if (!src) return '尚未執行預測';
+            return src.startsWith('synthetic') ? '示範合成資料 (' + src + ')，非真實設備紀錄' : src;
+        }
+
+        function render(data) {
+            const pred = data.prediction || {};
+            const attr = data.attribution || {};
+            $('dataSourceLabel').textContent = sourceLabel(pred.data_source);
+
+            if (!pred.found) {
+                $('resultSection').classList.add('hidden');
+                $('guardCard').classList.remove('hidden');
+                $('guardMessage').textContent = pred.answer_text || '無法完成預測。';
+                $('guardList').innerHTML = (pred.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+            } else {
+                $('guardCard').classList.add('hidden');
+                $('resultSection').classList.remove('hidden');
+                renderPrediction(pred);
+                renderAttribution(attr);
+                renderCurve(pred);
+            }
+            renderSteps(data.steps || []);
+        }
+
+        function renderPrediction(pred) {
+            const h = HEALTH_STYLE[pred.health_level] || HEALTH_STYLE.YELLOW;
+            $('rulValue').textContent = fmt(pred.predicted_rul_hours, 1);
+            $('rulDays').textContent = '≈ ' + fmt(pred.predicted_rul_hours / 24, 1) + ' 天';
+            const badge = $('healthBadge');
+            badge.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + h.badge;
+            badge.textContent = h.text;
+            $('healthPct').textContent = fmt(pred.health_index_pct, 0) + '%';
+            const bar = $('healthBar');
+            bar.style.width = Math.max(2, Math.min(100, pred.health_index_pct || 0)) + '%';
+            bar.style.background = h.bar;
+            const iv = pred.prediction_interval || [];
+            $('intervalText').textContent = iv.length === 2 ? `95% 預測區間：${fmt(iv[0], 0)} – ${fmt(iv[1], 0)} 小時（以測試集 RMSE 估計）` : '';
+            $('answerText').textContent = pred.answer_text || '';
+            $('warnList').innerHTML = (pred.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+
+            const m = pred.eval_metrics || {};
+            $('mMae').textContent = fmt(m.mae, 2);
+            $('mRmse').textContent = fmt(m.rmse, 2);
+            $('mR2').textContent = fmt(m.r2, 3);
+            $('mN').textContent = `${m.n_train ?? '--'} / ${m.n_test ?? '--'}`;
+        }
+
+        function renderAttribution(attr) {
+            const rows = attr.contributions || [];
+            $('baselineText').textContent = attr.baseline_rul_hours != null ? `基準 RUL（參數皆為平均）：${fmt(attr.baseline_rul_hours, 1)} h` : '';
+            $('attrText').textContent = attr.answer_text || '';
+            if (!rows.length) {
+                $('coefBody').innerHTML = '<tr><td colspan="6" class="py-3 text-slate-400 italic">無貢獻度資料</td></tr>';
+                return;
+            }
+            $('coefBody').innerHTML = rows.map((r) => {
+                const neg = r.contribution_hours < 0;
+                const color = neg ? '#f43f5e' : '#10b981';
+                return `<tr class="border-b border-slate-100">
+                    <td class="py-2 pr-3 font-medium text-slate-800">${esc(r.label)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${fmt(r.value, 1)} ${esc(r.unit)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${r.raw_coefficient > 0 ? '+' : ''}${fmt(r.raw_coefficient, 3)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums">${r.z_score > 0 ? '+' : ''}${fmt(r.z_score, 2)}</td>
+                    <td class="py-2 pr-3 text-right tabular-nums font-semibold" style="color:${color}">${r.contribution_hours > 0 ? '+' : ''}${fmt(r.contribution_hours, 1)}</td>
+                    <td class="py-2">
+                        <div class="flex items-center gap-2">
+                            <div class="h-2 flex-1 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${r.share_pct}%;background:${color}"></div></div>
+                            <span class="tabular-nums w-10 text-right text-slate-600">${fmt(r.share_pct, 0)}%</span>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderCurve(pred) {
+            const pts = pred.degradation_curve || [];
+            if (pts.length < 2) { $('curveBox').innerHTML = ''; return; }
+            const W = 640, H = 260, L = 52, R = 16, T = 16, B = 40;
+            const xs = pts.map((p) => p.operating_hours), ys = pts.map((p) => p.predicted_rul_hours);
+            const curH = pred.inputs.operating_hours, curY = pred.predicted_rul_hours;
+            const xMin = Math.min(...xs, curH), xMax = Math.max(...xs, curH);
+            const yMax = Math.max(...ys, curY, 1) * 1.08;
+            const sx = (x) => L + (x - xMin) / ((xMax - xMin) || 1) * (W - L - R);
+            const sy = (y) => T + (1 - y / yMax) * (H - T - B);
+
+            const line = pts.map((p) => `${sx(p.operating_hours).toFixed(1)},${sy(p.predicted_rul_hours).toFixed(1)}`).join(' ');
+            const yTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * yMax);
+            const xTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => xMin + t * (xMax - xMin));
+            const grid = yTicks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" stroke="#e2e8f0"/><text x="${L - 8}" y="${sy(v) + 4}" text-anchor="end" font-size="11" fill="#64748b">${v.toFixed(0)}</text>`).join('');
+            const xl = xTicks.map((v) => `<text x="${sx(v)}" y="${H - B + 18}" text-anchor="middle" font-size="11" fill="#64748b">${v.toFixed(0)}</text>`).join('');
+
+            $('curveBox').innerHTML = `
+                <svg viewBox="0 0 ${W} ${H}" class="w-full min-w-[480px]" role="img" aria-label="運轉時數與預測剩餘壽命的關係曲線">
+                    ${grid}${xl}
+                    <line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#94a3b8"/>
+                    <polyline points="${line}" fill="none" stroke="#0284c7" stroke-width="2.5" stroke-linejoin="round"/>
+                    <line x1="${sx(curH)}" x2="${sx(curH)}" y1="${T}" y2="${H - B}" stroke="#f59e0b" stroke-dasharray="4 4"/>
+                    <circle cx="${sx(curH)}" cy="${sy(curY)}" r="6" fill="#f59e0b" stroke="#fff" stroke-width="2"/>
+                    <text x="${Math.min(sx(curH) + 10, W - 150)}" y="${Math.max(sy(curY) - 10, T + 12)}" font-size="12" font-weight="600" fill="#b45309">目前 ${curY.toFixed(0)} h</text>
+                    <text x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle" font-size="12" fill="#475569">累積運轉時數 (h)</text>
+                    <text transform="translate(14 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="#475569">預測 RUL (h)</text>
+                </svg>`;
+        }
+
+        function renderSteps(steps) {
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            box.innerHTML = steps.map((s) => `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`).join('');
+        }
+
+        buildFields();
+        applyPreset('EQ-PRESS-01');
+        $('equipmentSelect').addEventListener('change', (e) => applyPreset(e.target.value));
+        $('resetBtn').addEventListener('click', () => applyPreset($('equipmentSelect').value));
+        $('runBtn').addEventListener('click', runPrediction);
+    </script>
+</body>
+</html>

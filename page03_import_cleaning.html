@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>03. 工廠圖資與維修履歷匯入頁</title>
+    <!-- Tailwind CSS v4.0 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans relative">
+
+    <!-- 載入遮罩 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-xs border border-slate-200 flex items-center gap-3 text-slate-700">
+            <svg class="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span id="overlayText" class="text-sm font-semibold tracking-wide">處理中，請稍候...</span>
+        </div>
+    </div>
+
+    <!-- 頂部 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-sky-600 text-white rounded-lg font-bold text-lg">MK</div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">工廠圖資與維修履歷匯入</h1>
+                    <p class="text-xs text-slate-500">系統頁面：03. 工廠圖資與維修履歷匯入頁 (/admin/import) | US-03 / US-04</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span id="roleBadge" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">👤 角色：確認中…</span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">🤖 MCP Tool：skill_27</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- 左側共用導覽（由 nav.js 產生） -->
+        <aside id="navMount" class="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4 h-fit"></aside>
+
+        <main class="lg:col-span-3 space-y-6 min-w-0">
+
+            <!-- 宣告與警語 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 border-b border-slate-100 pb-2.5">
+                    <span>📌 <strong>流程：</strong>上傳（工程師）→ 設定規則 → 匯入（管理者）</span>
+                    <span>🧮 <strong>演算法：</strong>正則清洗＋SHA-256 去重＋筆數核對＋滑動視窗切片</span>
+                </div>
+                <div id="authWarn" class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium hidden"></div>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-lg text-xs text-amber-900 font-medium">
+                    ⚠️ <strong>警語提示：</strong>匯入的文件一律標為<strong>內部資料（非公開）</strong>，不會出現在民眾可見的文件清單。
+                    PDF 只支援基本文字抽取，掃描檔或嵌入式字型的中文 PDF 會被拒絕（不寫入亂碼），請改以 CSV 或 Markdown 匯入。
+                    勾選「發佈為分析資料集」時，欄位符合的 CSV 會<strong>覆蓋</strong> data/ 下對應的分析資料（舊檔自動備份、保留最近 5 份），並重跑相關模型 Skill。
+                    畫面上的數字都是計算結果，無法直接修改；要改請改資料後重新匯入。
+                </div>
+            </section>
+
+            <!-- 上傳與設定 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div class="md:col-span-2">
+                        <label for="tokenInput" class="block text-sm font-semibold text-slate-800 mb-1.5">存取權杖（伺服器有設定時才需要）</label>
+                        <input id="tokenInput" type="password" autocomplete="off" placeholder="只保存在這個分頁的記憶體，重新整理即清除"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <button id="tokenBtn" type="button" class="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg cursor-pointer">驗證權限</button>
+                </div>
+
+                <div id="dropZone" tabindex="0" role="button" aria-label="選擇或拖曳檔案"
+                     class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-sm text-slate-500 hover:border-sky-400 hover:bg-sky-50 cursor-pointer">
+                    <div class="text-2xl mb-1">📂</div>
+                    <div class="font-semibold text-slate-700">拖曳檔案到這裡，或點擊選擇</div>
+                    <div id="limitText" class="text-xs mt-1">支援 .pdf／.csv／.md</div>
+                    <input id="fileInput" type="file" multiple accept=".pdf,.csv,.md" class="hidden">
+                </div>
+
+                <div id="uploadMsg" class="text-xs text-slate-600 hidden"></div>
+                <ul id="rejectList" class="list-disc pl-5 text-xs text-rose-700 space-y-0.5 hidden"></ul>
+
+                <div id="fileTableWrap" class="hidden overflow-x-auto">
+                    <table class="w-full text-xs border border-slate-200">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr><th class="text-left p-2">檔名</th><th class="text-right p-2">大小</th><th class="text-left p-2">偵測到的資料集</th><th class="text-left p-2">檔案類型</th><th class="p-2"></th></tr>
+                        </thead>
+                        <tbody id="fileRows"></tbody>
+                    </table>
+                </div>
+
+                <div id="rulesBox" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-slate-100 pt-4">
+                    <div class="space-y-2 text-sm">
+                        <div class="font-semibold text-slate-800">清洗規則</div>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="r_strip" checked class="accent-sky-600"> 去除非法字元並合併空白</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="r_dt" checked class="accent-sky-600"> 標準化日期時間格式（YYYY-MM-DD HH:MM:SS）</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="r_dedupe" checked class="accent-sky-600"> 去除重複段落／資料列（SHA-256）</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="r_publish" checked class="accent-sky-600"> 發佈為分析資料集並重算（備份舊檔）</label>
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <div class="font-semibold text-slate-800">切片設定</div>
+                        <div class="flex items-center gap-3">
+                            <label for="r_chunk" class="text-slate-600 w-28">chunk_size</label>
+                            <input id="r_chunk" type="number" min="50" max="5000" step="50" value="500" class="w-24 px-2 py-1.5 border border-slate-300 rounded-md text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <label for="r_overlap" class="text-slate-600 w-28">overlap</label>
+                            <input id="r_overlap" type="number" min="0" max="1000" step="10" value="50" class="w-24 px-2 py-1.5 border border-slate-300 rounded-md text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                        <div class="pt-2">
+                            <button id="runBtn" type="button" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold rounded-lg shadow-xs cursor-pointer">開始匯入與整理</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Guardrail 卡 -->
+            <section id="guardCard" class="bg-rose-50 border border-rose-200 rounded-xl p-5 text-rose-800 space-y-2 hidden">
+                <div class="font-bold text-sm">🛡️ 安全檢核攔截 (Guardrail)</div>
+                <p id="guardMessage" class="text-sm"></p>
+                <ul id="guardList" class="list-disc pl-5 text-xs space-y-0.5"></ul>
+            </section>
+
+            <!-- 結果 -->
+            <section id="resultSection" class="space-y-6 hidden">
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <span class="text-sm font-bold text-slate-900">📊 匯入結果 <span id="importId" class="text-[11px] font-normal text-slate-400"></span></span>
+                        <span id="statusBadge" class="px-3 py-1 font-semibold text-xs rounded-full border"></span>
+                    </div>
+                    <p id="answerText" class="text-sm text-slate-700"></p>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="statCards"></div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-600 mb-2">五步進度</div>
+                        <div class="grid grid-cols-1 md:grid-cols-5 gap-2" id="progressCards"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                    <div class="text-sm font-bold text-slate-900">📄 各檔案處理結果</div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs border border-slate-200">
+                            <thead class="bg-slate-50 text-slate-600">
+                                <tr><th class="text-left p-2">檔名</th><th class="text-left p-2">狀態</th><th class="text-right p-2">讀取</th><th class="text-right p-2">保留</th><th class="text-right p-2">重複</th><th class="text-right p-2">切片</th><th class="text-left p-2">各階段</th><th class="text-left p-2">失敗原因</th></tr>
+                            </thead>
+                            <tbody id="resultRows"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="publishBox" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 hidden">
+                    <div class="text-sm font-bold text-slate-900">🔁 資料集發佈與模型重算</div>
+                    <div id="publishList" class="space-y-3"></div>
+                </div>
+            </section>
+
+            <!-- 匯入紀錄 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-bold text-slate-900">🗂️ 匯入紀錄 <span id="totalsText" class="text-[11px] font-normal text-slate-400"></span></span>
+                    <button id="logBtn" type="button" class="px-3 py-1 text-xs border border-slate-300 rounded-md hover:bg-slate-50 cursor-pointer">重新整理</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs border border-slate-200">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr><th class="text-left p-2">時間</th><th class="text-left p-2">檔名</th><th class="text-left p-2">類型</th><th class="text-left p-2">狀態</th><th class="text-right p-2">讀取</th><th class="text-right p-2">保留</th><th class="text-right p-2">重複率</th><th class="text-right p-2">切片</th><th class="text-left p-2">失敗原因</th></tr>
+                        </thead>
+                        <tbody id="logRows"><tr><td colspan="9" class="p-3 text-slate-400 italic">載入中...</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 演算法透明度 -->
+            <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div class="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>🧮 這個結果怎麼算的</span>
+                        <span class="text-xs font-normal text-slate-500">（演算法推導過程與透明度日誌）</span>
+                    </h2>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">skill_27（匯入）→ 資料集對應的模型 Skill（重算）</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex-wrap">
+                    <span class="font-semibold text-slate-600">三色標籤說明：</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300">🔵 藍色：Skill 模組</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">🟣 紫色：課堂演算法</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ 灰色：使用套件</span>
+                </div>
+                <div id="algorithmStepsContainer" class="space-y-3">
+                    <div class="text-xs text-slate-400 italic">尚未執行...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="nav.js"></script>
+    <script>
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const isNum = (n) => typeof n === 'number' && isFinite(n);
+        const show = (id, on) => $(id).classList.toggle('hidden', !on);
+        const FILE_TYPES = ['維修履歷', '感測器圖資', '設備規格書', '製程數據'];
+        const STATUS = {
+            ok: ['bg-emerald-50 text-emerald-700 border-emerald-200', '完成'],
+            warn: ['bg-amber-50 text-amber-700 border-amber-200', '部分完成'],
+            failed: ['bg-rose-50 text-rose-700 border-rose-200', '失敗'],
+            skipped: ['bg-slate-100 text-slate-500 border-slate-200', '略過'],
+        };
+        const FSTATUS = { imported: ['已匯入', 'emerald'], duplicate_file: ['整檔重複', 'amber'], no_new_content: ['無新內容', 'amber'], failed: ['失敗', 'rose'], pending: ['未處理', 'slate'] };
+        const STAGE_NAMES = { read: '讀取', clean: '清洗', dedupe: '去重', reconcile: '核對', chunk: '切片' };
+
+        let token = '';
+        let staged = [];     // 已上傳的檔案資訊
+        let role = null;
+        let limits = { max_bytes: 5242880, max_files: 10, extensions: ['.pdf', '.csv', '.md'] };
+
+        const headers = (json) => {
+            const h = {};
+            if (json) h['Content-Type'] = 'application/json';
+            if (token) h['X-Import-Token'] = token;
+            return h;
+        };
+        const overlay = (on, text) => { if (text) $('overlayText').textContent = text; show('loadingOverlay', on); };
+        const fmtSize = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1024).toFixed(1) + ' KB';
+
+        function guard(message, list) {
+            show('guardCard', !!message);
+            $('guardMessage').textContent = message || '';
+            $('guardList').innerHTML = (list || []).map((x) => `<li>${esc(x)}</li>`).join('');
+        }
+
+        // ---------- 權限 ----------
+        async function loadSession() {
+            try {
+                const res = await fetch('/api/import/session', { headers: headers(false) });
+                const d = await res.json();
+                role = d.role;
+                if (d.limits) limits = d.limits;
+                $('limitText').textContent = `支援 ${limits.extensions.join('／')}，單檔 ≤ ${Math.floor(limits.max_bytes / 1048576)}MB，一次最多 ${limits.max_files} 個`;
+                const names = { admin: '管理者', uploader: '工程師（僅可上傳）', null: '未授權', undefined: '未授權' };
+                const b = $('roleBadge');
+                b.textContent = '👤 角色：' + (names[role] || '未授權');
+                b.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ' +
+                    (role === 'admin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : role === 'uploader' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-rose-50 text-rose-700 border-rose-200');
+                const w = $('authWarn');
+                if (!d.auth_required) {
+                    w.textContent = '🔓 伺服器尚未設定 IMPORT_ADMIN_TOKEN / IMPORT_UPLOAD_TOKEN，目前任何能連到這個網址的人都能上傳與匯入。僅限本機開發使用，部署前請設定環境變數。';
+                    w.classList.remove('hidden');
+                } else if (role === 'uploader') {
+                    w.textContent = '你目前是工程師權限：可以上傳檔案，但執行匯入需要管理者權杖。';
+                    w.classList.remove('hidden');
+                } else {
+                    w.classList.add('hidden');
+                }
+            } catch (err) {
+                guard('無法連線到後端：' + err.message);
+            }
+        }
+
+        // ---------- 上傳 ----------
+        async function uploadFiles(fileList) {
+            const files = Array.from(fileList || []);
+            if (!files.length) return;
+            const fd = new FormData();
+            files.forEach((f) => fd.append('files', f, f.name));
+            overlay(true, '上傳並檢查檔案中...');
+            guard('');
+            try {
+                const res = await fetch('/api/import/upload', { method: 'POST', headers: headers(false), body: fd });
+                const d = await res.json();
+                if (!res.ok || d.status === 'error') {
+                    guard(d.answer_text || `上傳失敗（HTTP ${res.status}）`);
+                    return;
+                }
+                staged = staged.concat(d.files || []);
+                const rej = d.rejected || [];
+                $('uploadMsg').textContent = `已接收 ${(d.files || []).length} 個檔案，拒絕 ${rej.length} 個。`;
+                show('uploadMsg', true);
+                $('rejectList').innerHTML = rej.map((r) => `<li>${esc(r.name)}：${esc(r.reason)}</li>`).join('');
+                show('rejectList', rej.length > 0);
+                renderStaged();
+            } catch (err) {
+                guard('無法連線到後端：' + err.message);
+            } finally {
+                overlay(false);
+            }
+        }
+
+        function renderStaged() {
+            show('fileTableWrap', staged.length > 0);
+            show('rulesBox', staged.length > 0);
+            $('fileRows').innerHTML = staged.map((f, i) => `
+                <tr class="border-t border-slate-100">
+                    <td class="p-2 break-all">${esc(f.original_name)}</td>
+                    <td class="p-2 text-right tabular-nums">${fmtSize(f.size)}</td>
+                    <td class="p-2">${f.dataset ? `<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">${esc(f.dataset)}</span>` : '<span class="text-slate-400">僅收進文件索引</span>'}</td>
+                    <td class="p-2"><select data-i="${i}" class="ftype px-2 py-1 border border-slate-300 rounded-md bg-white">
+                        ${FILE_TYPES.map((t) => `<option ${t === (f.chosen_type || f.suggested_type) ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+                    <td class="p-2 text-right"><button data-i="${i}" class="rm text-rose-600 hover:underline cursor-pointer">移除</button></td>
+                </tr>`).join('');
+            document.querySelectorAll('.ftype').forEach((el) => el.addEventListener('change', (e) => { staged[+e.target.dataset.i].chosen_type = e.target.value; }));
+            document.querySelectorAll('.rm').forEach((el) => el.addEventListener('click', (e) => { staged.splice(+e.target.dataset.i, 1); renderStaged(); }));
+        }
+
+        // ---------- 匯入 ----------
+        function readRules() {
+            return {
+                strip_noise: $('r_strip').checked, normalize_datetime: $('r_dt').checked, dedupe: $('r_dedupe').checked,
+                chunk_size: parseInt($('r_chunk').value, 10), overlap: parseInt($('r_overlap').value, 10),
+            };
+        }
+
+        async function runImport() {
+            if (!staged.length) { guard('請先上傳至少一個檔案。'); return; }
+            const rules = readRules();
+            if (!(rules.chunk_size >= 50) || !(rules.overlap >= 0) || rules.overlap >= rules.chunk_size) {
+                guard('切片設定不合理：chunk_size 需 ≥ 50，overlap 需 ≥ 0 且小於 chunk_size。');
+                return;
+            }
+            const body = {
+                files: staged.map((f) => ({ id: f.id, original_name: f.original_name, file_type: f.chosen_type || f.suggested_type })),
+                rules, publish: $('r_publish').checked,
+            };
+            overlay(true, '正在清洗、去重、切片並重算模型，請稍候...');
+            guard('');
+            try {
+                const res = await fetch('/api/import', { method: 'POST', headers: headers(true), body: JSON.stringify(body) });
+                const d = await res.json();
+                if (!res.ok || d.status === 'error') {
+                    show('resultSection', false);
+                    guard(d.answer_text || `匯入失敗（HTTP ${res.status}）`);
+                    renderSteps(d.steps || []);
+                    return;
+                }
+                staged = [];
+                renderStaged();
+                renderResult(d);
+                loadLogs();
+            } catch (err) {
+                guard('無法連線到後端：' + err.message);
+            } finally {
+                overlay(false);
+            }
+        }
+
+        function renderResult(d) {
+            const im = d.import || {};
+            show('resultSection', true);
+            $('importId').textContent = im.import_id ? '#' + im.import_id : '';
+            $('answerText').textContent = im.answer_text || '';
+            const g = String(im.guardrail_status || '');
+            const sb = $('statusBadge');
+            const color = g.startsWith('BLOCKED') ? 'rose' : g.includes('WARNING') ? 'amber' : 'green';
+            sb.className = 'px-3 py-1 font-semibold text-xs rounded-full border ' + (color === 'rose' ? STATUS.failed[0] : color === 'amber' ? STATUS.warn[0] : STATUS.ok[0]);
+            sb.textContent = g || '--';
+            if (g.startsWith('BLOCKED')) {
+                guard(im.answer_text || '匯入被攔截', (im.failures || []).map((f) => `${f.file}（${f.stage}）：${f.reason}`));
+            } else if ((im.warnings || []).length) {
+                guard('', []);
+            }
+            const stat = (label, v, unit) => `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3"><div class="text-[11px] text-slate-500">${label}</div><div class="text-xl font-bold text-slate-900 tabular-nums">${isNum(v) ? v : '--'}<span class="text-xs font-normal text-slate-500">${unit}</span></div></div>`;
+            $('statCards').innerHTML = stat('清洗後保留筆數', im.rows_cleaned_count, ' 筆') + stat('產生切片', im.chunks_created_count, ' 個') +
+                stat('重複率', im.duplicate_rate_pct, ' %') + stat('匯入完成度', im.import_progress_pct, ' %');
+            $('progressCards').innerHTML = (d.progress || []).map((p, i) => {
+                const s = STATUS[p.status] || STATUS.skipped;
+                return `<div class="border rounded-lg p-2.5 ${s[0]}"><div class="text-[11px] font-bold">${i + 1}. ${esc(p.title)} · ${s[1]}</div><div class="text-[11px] mt-1 leading-snug">${esc(p.detail)}</div></div>`;
+            }).join('');
+            $('resultRows').innerHTML = (im.files || []).map((f) => {
+                const st = FSTATUS[f.status] || [f.status, 'slate'];
+                const stages = Object.keys(STAGE_NAMES).map((k) => {
+                    const v = (f.stages || {})[k] || 'skipped';
+                    const c = v === 'ok' ? 'text-emerald-600' : v === 'failed' ? 'text-rose-600 font-bold' : 'text-slate-400';
+                    return `<span class="${c}">${STAGE_NAMES[k]}</span>`;
+                }).join(' → ');
+                return `<tr class="border-t border-slate-100 align-top">
+                    <td class="p-2 break-all">${esc(f.file_name)}</td>
+                    <td class="p-2"><span class="px-1.5 py-0.5 rounded border bg-${st[1]}-50 text-${st[1]}-700 border-${st[1]}-200">${esc(st[0])}</span></td>
+                    <td class="p-2 text-right tabular-nums">${f.rows_read ?? 0}</td><td class="p-2 text-right tabular-nums">${f.rows_cleaned ?? 0}</td>
+                    <td class="p-2 text-right tabular-nums">${f.duplicates ?? 0}</td><td class="p-2 text-right tabular-nums">${f.chunks ?? 0}</td>
+                    <td class="p-2 whitespace-nowrap">${stages}</td>
+                    <td class="p-2 text-rose-700">${esc(f.failure_reason || '')}</td></tr>`;
+            }).join('') || '<tr><td colspan="8" class="p-3 text-slate-400 italic">無檔案</td></tr>';
+
+            const pubs = d.publishes || [];
+            show('publishBox', pubs.length > 0);
+            $('publishList').innerHTML = pubs.map((p) => `
+                <div class="border border-slate-200 rounded-lg p-3 text-xs space-y-1.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="font-bold text-slate-800">${esc(p.label || p.dataset)} <span class="font-normal text-slate-400">${esc(p.path || '')} · ${p.rows ?? 0} 列</span></span>
+                        <span class="px-2 py-0.5 rounded border ${p.ok ? STATUS.ok[0] : STATUS.failed[0]}">${p.ok ? '已發佈' : '發佈失敗'}</span>
+                    </div>
+                    ${p.error ? `<div class="text-rose-700">${esc(p.error)}</div>` : ''}
+                    ${p.warning ? `<div class="text-amber-700">⚠️ ${esc(p.warning)}</div>` : ''}
+                    ${p.backup ? `<div class="text-slate-500">舊檔備份：${esc(p.backup)}</div>` : ''}
+                    ${(p.refreshed || []).map((r) => `<div class="flex flex-wrap gap-2 items-center"><span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(r.skill)}</span>
+                        <span class="${r.ok ? 'text-slate-600' : 'text-rose-700'}">${esc(r.guardrail_status || '')}</span></div>`).join('')}
+                </div>`).join('');
+            if (d.totals) $('totalsText').textContent = `（索引共 ${d.totals.documents} 份文件、${d.totals.chunks} 個切片）`;
+            renderSteps(d.steps || []);
+        }
+
+        // ---------- 紀錄 ----------
+        async function loadLogs() {
+            try {
+                const res = await fetch('/api/import/logs?limit=30', { headers: headers(false) });
+                const d = await res.json();
+                if (!res.ok) {
+                    $('logRows').innerHTML = `<tr><td colspan="9" class="p-3 text-slate-500">${esc(d.answer_text || '無法讀取匯入紀錄（需要權限）')}</td></tr>`;
+                    return;
+                }
+                if (d.totals) $('totalsText').textContent = `（索引共 ${d.totals.documents} 份文件、${d.totals.chunks} 個切片）`;
+                $('logRows').innerHTML = (d.logs || []).map((l) => `
+                    <tr class="border-t border-slate-100 align-top">
+                        <td class="p-2 whitespace-nowrap">${esc((l.created_at || '').replace('T', ' '))}</td><td class="p-2 break-all">${esc(l.file_name)}</td>
+                        <td class="p-2">${esc(l.file_type)}</td><td class="p-2">${esc((FSTATUS[l.status] || [l.status])[0])}</td>
+                        <td class="p-2 text-right tabular-nums">${l.rows_read ?? 0}</td><td class="p-2 text-right tabular-nums">${l.rows_cleaned ?? 0}</td>
+                        <td class="p-2 text-right tabular-nums">${isNum(l.duplicate_rate_pct) ? l.duplicate_rate_pct.toFixed(1) + '%' : '--'}</td>
+                        <td class="p-2 text-right tabular-nums">${l.chunks ?? 0}</td>
+                        <td class="p-2 text-rose-700">${l.failure_stage ? esc(l.failure_stage + '：' + (l.failure_reason || '')) : ''}</td></tr>`).join('')
+                    || '<tr><td colspan="9" class="p-3 text-slate-400 italic">尚無匯入紀錄</td></tr>';
+            } catch (err) {
+                $('logRows').innerHTML = `<tr><td colspan="9" class="p-3 text-rose-700">無法連線到後端：${esc(err.message)}</td></tr>`;
+            }
+        }
+
+        // ---------- 步驟日誌 ----------
+        function renderSteps(steps) {
+            const box = $('algorithmStepsContainer');
+            if (!steps.length) { box.innerHTML = '<div class="text-xs text-slate-400 italic">無步驟記錄</div>'; return; }
+            let last = '';
+            box.innerHTML = steps.map((s) => {
+                const head = s.skill_name !== last ? `<div class="text-xs font-bold text-blue-800 pt-1">▸ ${esc(s.skill_name)}</div>` : '';
+                last = s.skill_name;
+                return head + `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white space-y-2 text-xs shadow-2xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <span class="font-bold text-slate-800">步驟 ${esc(s.step_number)}：${esc(s.step_name)}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-800 border border-blue-200">🔵 ${esc(s.skill_name)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800 border border-purple-200">🟣 ${esc(s.algorithm_used)}</span>
+                            <span class="px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800 border border-slate-300">⚫ ${esc(s.package_used)}</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 leading-normal">${esc(s.description)}</p>
+                </div>`;
+            }).join('');
+        }
+
+        // ---------- 事件 ----------
+        const dz = $('dropZone');
+        dz.addEventListener('click', () => $('fileInput').click());
+        dz.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('fileInput').click(); } });
+        dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('bg-sky-50', 'border-sky-400'); });
+        dz.addEventListener('dragleave', () => dz.classList.remove('bg-sky-50', 'border-sky-400'));
+        dz.addEventListener('drop', (e) => { e.preventDefault(); dz.classList.remove('bg-sky-50', 'border-sky-400'); uploadFiles(e.dataTransfer.files); });
+        $('fileInput').addEventListener('change', (e) => { uploadFiles(e.target.files); e.target.value = ''; });
+        $('tokenBtn').addEventListener('click', async () => { token = $('tokenInput').value.trim(); await loadSession(); loadLogs(); });
+        $('runBtn').addEventListener('click', runImport);
+        $('logBtn').addEventListener('click', loadLogs);
+
+        loadSession().then(loadLogs);
+    </script>
+</body>
+</html>
