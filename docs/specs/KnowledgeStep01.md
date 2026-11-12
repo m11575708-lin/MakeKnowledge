@@ -10,7 +10,7 @@
 | :---: | :--- | :--- | :--- | :--- | :--- |
 | 01 | 製造知識庫檢索與智慧問答頁 | 共同網頁 1 | `/knowledge/chat` | `page01_knowledge_chat.html` | 一般民眾、設備維修工程師、品質與製程工程師 |
 | 02 | 製造規範與技術文件收錄頁 | 共同網頁 2 | `/knowledge/documents` | `page02_doc_collection.html` | 一般民眾、各工程師 |
-| 03 | 工廠圖資與維修履歷匯入整理頁 | 共同網頁 3 | `/knowledge/import` | `page03_data_import.html` | **管理者**（工程師可上傳檔案） |
+| 03 | 工廠圖資與維修履歷匯入整理頁 | 共同網頁 3 | `/knowledge/import` | `page03_import_cleaning.html` | **管理者**（工程師可上傳檔案） |
 | 04 | 製造知識庫維運與回答品質評估頁 | 共同網頁 4 | `/knowledge/ops-eval` | `page04_ops_eval.html` | **管理者**（廠長唯讀） |
 | 05 | 公開法規與商品檢驗查詢頁 | 主題網頁 1 | `/regulations/search` | `page05_regulations_search.html` | 一般民眾 |
 | 06 | 設備壽命預測頁 | 主題網頁 2 | `/equipment/rul-prediction` | `page06_rul_prediction.html` | 設備維修工程師 |

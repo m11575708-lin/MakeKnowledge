@@ -155,7 +155,7 @@ graph LR
   5. 通過時呼叫 AnythingLLM Developer API（`mode: "query"`）產生回答，合併來源卡輸出。
 
 ### 頁面 02：製造規範與技術文件收錄頁
-* **網址**：`/knowledge/documents`　**API**：`POST /api/documents`　**故事**：US-17
+* **網址**：`/knowledge/documents`　**API**：`POST /api/documents`、`POST /api/documents/preview`　**故事**：US-17
 * **主要角色**：一般民眾（公開文件）、各工程師、管理者
 * **畫面區塊**：
   1. **篩選工具列**：類別多選（CNS 標準 / 職安法規 / 設備維修手冊 / 製程品質規範）、日期區間、關鍵字、「套用篩選」、「匯出文件清單」。
@@ -164,7 +164,7 @@ graph LR
 * **計算流程**：`skill_26_document_catalog_query` 以 `sqlite3` 依角色、類別、日期、關鍵字過濾文件元資料（匯入時由 skill_27 寫入）。
 
 ### 頁面 03：工廠圖資與維修履歷匯入整理頁
-* **網址**：`/knowledge/import`　**API**：`POST /api/import`　**故事**：US-18
+* **網址**：`/knowledge/import`　**API**：`GET /api/import/session`、`POST /api/import/upload`、`POST /api/import`、`GET /api/import/logs`　**故事**：US-18
 * **主要角色**：管理者（工程師可上傳）
 * **畫面區塊**：
   1. **檔案拖曳區**：支援 `.pdf`、`.csv`、`.md`；類型標籤（維修履歷 / 感測器圖資 / 設備規格書 / 製程數據）。
@@ -174,7 +174,7 @@ graph LR
 * **計算流程**：`skill_27_kb_import_pipeline` 用 `re` 清洗、`hashlib` SHA-256 去重、固定長度滑動視窗切片並寫入文件索引；感測器 CSV 另交 `skill_03` 標準化；最後重跑模型類 Skill，結果存成 JSON 檔（網頁只讀結果，不在使用者按下時重算）。
 
 ### 頁面 04：製造知識庫維運與回答品質評估頁
-* **網址**：`/knowledge/ops-eval`　**API**：`POST /api/ops/freshness`、`POST /api/ops/eval`　**故事**：US-19
+* **網址**：`/knowledge/ops-eval`　**API**：`GET /api/ops/session`、`GET /api/ops/last`、`POST /api/ops/freshness`、`POST /api/ops/eval`　**故事**：US-19
 * **主要角色**：管理者（廠長唯讀）
 * **畫面區塊**：
   1. **KPI 卡** `[#SK-28]`：資料新鮮度（正常 / 需更新）、落後超過門檻的資料集數、系統版本。
@@ -194,7 +194,7 @@ graph LR
 * **計算流程**：關鍵字查詢走 `skill_01`（TF-IDF + 餘弦 + KNN）；機械資格查詢走 `skill_02`（Jaccard $J(A,B)=\frac{|A\cap B|}{|A\cup B|}$ + KNN），各自套用門檻防呆。
 
 ### 頁面 06：設備壽命預測頁
-* **網址**：`/equipment/rul-prediction`　**API**：`POST /api/rul-prediction`　**故事**：US-03
+* **網址**：`/equipment/rul-prediction`　**API**：`POST /api/rul-predict`　**故事**：US-03
 * **畫面區塊**：
   1. **參數輸入**：設備 ID、運轉時數、振動、溫度、負載率滑桿、「執行 RUL 壽命預測」。
   2. **結果卡** `[#SK-03, #SK-04, #SK-05]`：`predicted_rul_hours`、係數表、MAE / RMSE（訓練與測試分開）、「僅供參考」。
@@ -218,7 +218,7 @@ graph LR
 * **計算流程**：`skill_10` 故障碼轉標準化加權特徵 → `skill_09` 歐氏距離 KNN（K=3）→ `skill_11` 備品共現矩陣物品相似度加權推薦。
 
 ### 頁面 09：維修案例登錄與故障碼驗證頁
-* **網址**：`/equipment/repair-log`　**API**：`POST /api/repair-log/validate`　**故事**：US-08
+* **網址**：`/equipment/repair-log`　**API**：`POST /api/repair-log`、`GET /api/repair-log/recent`、`POST /api/repair-log/reset-model`　**故事**：US-08
 * **畫面區塊**：
   1. **時間軸表單**：設備 ID、日期時間、故障碼、處置說明。
   2. **即時數值**：`current`、`pressure`、「即時驗證並儲存案例」。
@@ -226,7 +226,7 @@ graph LR
 * **計算流程**：`skill_12` 正則與臨界值檢查（不通過就停止）→ `skill_13` 感知器 $f(\mathbf{x})=\text{step}(\mathbf{w}^T\mathbf{x}+b)$，判錯時 $\mathbf{w}\leftarrow\mathbf{w}+\eta(y-\hat{y})\mathbf{x}$。
 
 ### 頁面 10：品質異常根本原因分析頁
-* **網址**：`/quality/root-cause`　**API**：`POST /api/root-cause`　**故事**：US-09
+* **網址**：`/quality/root-cause`　**API**：`GET /api/root-cause/batches`、`POST /api/root-cause`　**故事**：US-09
 * **畫面區塊**：
   1. **設定區**：`batch_id`、樹數量滑桿（預設 100）、「執行根本原因分析」。
   2. **良率卡** `[#SK-14]`：`yield_rate_prediction`、`ensemble_prediction`。

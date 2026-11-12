@@ -60,3 +60,16 @@
 5. **steps 寫的套件 `numpy`**：與「只用標準函式庫」規則不符，需移除。
 6. **page01 左側選單只列 01、02、05 三頁**：需改為完整 13 頁（檔名見 Step01 總表）。
 7. **`mcp_server.py` 只有 skill_01、02 兩個工具**：其餘 Skill 完成後再陸續加入。
+
+---
+
+# v2.1 修訂（2026-11-12，依 GitHub 上的實際程式對齊）
+
+| 項目 | 規格原寫法 | 改為（與程式一致） |
+| :--- | :--- | :--- |
+| 03 頁檔名 | `page03_data_import.html` | `page03_import_cleaning.html` |
+| 06 頁 API | `POST /api/rul-prediction` | `POST /api/rul-predict` |
+| 09 頁 API | `POST /api/repair-log/validate` | `POST /api/repair-log`、`GET /api/repair-log/recent`、`POST /api/repair-log/reset-model` |
+| 02、03、04、10 頁 API | 只列主要路由 | 補上輔助路由（preview、session、upload、logs、last、batches） |
+
+第五節「現有程式與規格不一致之處」的狀態：第 1–7 點已在程式中處理（金鑰改環境變數、steps 改為實際計算、文件查詢接 skill_26、29 個 MCP 工具、13 頁共用選單 `nav.js`）。另外移除 `get_workspaces.py` 內寫死的金鑰、刪除重複的 `skill_07_risk_level_classification (1).py`，並新增 `.gitignore` 排除 `venv/` 與 `__pycache__/`。
