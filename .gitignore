@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# 虛擬環境
+venv/
+.venv/
+env/
+
+# 金鑰與本機設定
+.env
+*.env
+
+# 系統檔
+.DS_Store
+Thumbs.db
