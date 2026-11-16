@@ -11,6 +11,7 @@ import traceback
 
 # 將專案根目錄加入系統路徑，確保能順利匯入模組
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills"))
 
 
 # 注意：MCP 以 STDIO 通訊，stdout 專供協定使用。

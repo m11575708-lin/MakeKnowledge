@@ -13,9 +13,11 @@ import requests
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.exceptions import RequestEntityTooLarge
 
-# 將專案根目錄加入系統路徑
+# 將專案根目錄與 skills/ 加入系統路徑
+# （skills/ 內的 Skill 以 `from skill_03_... import` 互相引用，需要 skills/ 在搜尋路徑上）
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BASE_DIR)
+sys.path.append(os.path.join(BASE_DIR, "skills"))
 
 
 # ---------------------------------------------------------------------------
@@ -439,12 +441,19 @@ def api_failure_risk():
             pressure=values["pressure"],
         )
         prob_value = probability.get("failure_probability")
-        risk = classify_risk_level(failure_probability=prob_value)
         cost = tune_cost_threshold(
             cost_downtime=values["cost_downtime"],
             cost_inspection=values["cost_inspection"],
             failure_probability=prob_value,
         )
+        # 燈號門檻來自 skill_08 的成本最佳門檻 θ：p ≥ θ 紅燈、p ≥ θ/2 黃燈，
+        # 確保燈號與「是否派工」的建議一致；成本計算失敗時才退回 skill_07 的預設門檻。
+        theta = cost.get("optimal_threshold") if isinstance(cost, dict) else None
+        if isinstance(theta, (int, float)) and 0.0 < theta < 1.0:
+            risk = classify_risk_level(failure_probability=prob_value,
+                                       yellow_threshold=theta / 2, red_threshold=theta)
+        else:
+            risk = classify_risk_level(failure_probability=prob_value)
     except Exception as e:
         print(f"[failure-risk 失敗]\n{traceback.format_exc()}", file=sys.stderr)
         return jsonify({
