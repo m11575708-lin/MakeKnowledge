@@ -72,4 +72,33 @@
 | 09 頁 API | `POST /api/repair-log/validate` | `POST /api/repair-log`、`GET /api/repair-log/recent`、`POST /api/repair-log/reset-model` |
 | 02、03、04、10 頁 API | 只列主要路由 | 補上輔助路由（preview、session、upload、logs、last、batches） |
 
-第五節「現有程式與規格不一致之處」的狀態：第 1–7 點已在程式中處理（金鑰改環境變數、steps 改為實際計算、文件查詢接 skill_26、29 個 MCP 工具、13 頁共用選單 `nav.js`）。另外移除 `get_workspaces.py` 內寫死的金鑰、刪除重複的 `skill_07_risk_level_classification (1).py`，並新增 `.gitignore` 排除 `venv/` 與 `__pycache__/`。
+第五節「現有程式與規格不一致之處」的狀態：第 1–7 點已在程式中處理（金鑰改環境變數、steps 改為實際計算、文件查詢接 skill_26、29 個 MCP 工具、13 頁共用選單 `nav.js`）。另外刪除含有寫死金鑰的 `get_workspaces.py`、刪除重複的 `skill_07_risk_level_classification (1).py`，並新增 `.gitignore` 排除 `venv/` 與 `__pycache__/`。
+
+---
+
+# v2.2 修訂（2026-11-14，實際執行 29 個 Skill 時發現並修正）
+
+| 問題 | 影響 | 修正 |
+| :--- | :--- | :--- |
+| `skills/` 不在 Python 搜尋路徑上 | skill_04、05、06、08 載入失敗，06、07 頁出錯 | `app.py`、`mcp_server.py` 把 `skills/` 加入 `sys.path` |
+| 留錯了 `skill_07` 的版本（v2.1 誤刪正確版） | 07 頁呼叫不存在的函式而出錯 | 換回與 skill_06、08 同一代的版本（使用者已於 11-12 上傳） |
+| 燈號用固定門檻 0.4／0.7，成本分析用最佳門檻 0.04 | 07 頁同時顯示「綠燈」與「建議派工檢修」 | `app.py` 先算 skill_08 的最佳門檻 θ，再以 θ（紅）、θ/2（黃）判燈號 |
+| 19 個 `_*.py` 輔助模組與 `__init__.py` 放在專案根目錄 | `_common.py` 把根目錄算成上一層，輸出檔寫到專案外、匯入頁讀不到上傳檔 | 全部移到 `skills/` |
+
+修正後 13 頁的 API 全部回應正常，29 個 MCP 工具都能執行（skill_01 需提供查詢字串、skill_27 需提供檔名）。
+
+`skills/failure_core.py`、`skills/skill_common.py` 只被已淘汰的舊版 skill_07 使用，目前沒有程式引用，可視需要刪除。
+
+---
+
+# v2.3 修訂（2026-11-14，放入知識庫文件）
+
+| 項目 | 內容 |
+| :--- | :--- |
+| `docs/law_*.md` | 《職業安全衛生法》61 條、《危險性機械及設備安全檢查規則》173 條，一條一個檔（共 234 個），條文與全國法規資料庫 PDF 逐字核對一致 |
+| `data/catalog_manifest.json` | 234 條全部標為公開，記錄法規名稱與條號、修正日期、全國法規資料庫單條網址、授權（著作權法第 9 條） |
+| `data/eval/gold_20.json` | 20 題標準問答（Claude 依條文草擬，請使用者複核） |
+| `tools/split_laws.py` | 法規 PDF 轉檔腳本，法規修正時可重跑 |
+
+放入後：skill_01、26、29 有實際結果；20 題 Top-3 命中率 70.0%、MRR@10 0.65（2026-11-14）。
+資料新鮮度對 docs/ 用的是檔案修改日（程式設計如此），不是法規修正日。
