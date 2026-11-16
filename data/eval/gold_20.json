@@ -1,0 +1,126 @@
+{
+ "auto_generated": false,
+ "note": "2026-11-14 依職業安全衛生法、危險性機械及設備安全檢查規則條文擬題（Claude 草擬），請使用者複核題意與預期條文",
+ "questions": [
+  {
+   "qid": "Q01",
+   "query": "危險性機械沒有檢查合格可以先拿來用嗎？",
+   "expected": "law_osh_act_art016",
+   "scope": "all"
+  },
+  {
+   "qid": "Q02",
+   "query": "操作起重機的人需要具備什麼資格？",
+   "expected": "law_osh_act_art024",
+   "scope": "all"
+  },
+  {
+   "qid": "Q03",
+   "query": "工作現場有立即危險，勞工可以先停工退到安全的地方嗎？",
+   "expected": "law_osh_act_art018",
+   "scope": "all"
+  },
+  {
+   "qid": "Q04",
+   "query": "在高溫場所工作，一天最多能工作幾小時？",
+   "expected": "law_osh_act_art019",
+   "scope": "all"
+  },
+  {
+   "qid": "Q05",
+   "query": "公司僱用新員工時要做體格檢查嗎？",
+   "expected": "law_osh_act_art020",
+   "scope": "all"
+  },
+  {
+   "qid": "Q06",
+   "query": "公司需要設置安全衛生人員並訂管理計畫嗎？",
+   "expected": "law_osh_act_art023",
+   "scope": "all"
+  },
+  {
+   "qid": "Q07",
+   "query": "把工程交給承攬商之前，要先做風險評估和告知嗎？",
+   "expected": "law_osh_act_art026",
+   "scope": "all"
+  },
+  {
+   "qid": "Q08",
+   "query": "未滿十八歲的人不能做哪些危險工作？",
+   "expected": "law_osh_act_art029",
+   "scope": "all"
+  },
+  {
+   "qid": "Q09",
+   "query": "懷孕的女性員工不能從事哪些工作？",
+   "expected": "law_osh_act_art030",
+   "scope": "all"
+  },
+  {
+   "qid": "Q10",
+   "query": "雇主一定要給員工安全衛生教育訓練嗎？",
+   "expected": "law_osh_act_art032",
+   "scope": "all"
+  },
+  {
+   "qid": "Q11",
+   "query": "安全衛生工作守則要怎麼訂定？",
+   "expected": "law_osh_act_art034",
+   "scope": "all"
+  },
+  {
+   "qid": "Q12",
+   "query": "工廠發生有人死亡的職災，要在幾小時內通報？",
+   "expected": "law_osh_act_art037",
+   "scope": "all"
+  },
+  {
+   "qid": "Q13",
+   "query": "違反危險性機械檢查規定害人死亡，會被判多重？",
+   "expected": "law_osh_act_art040",
+   "scope": "all"
+  },
+  {
+   "qid": "Q14",
+   "query": "不符合安全標準的機械設備可以賣或出租嗎？",
+   "expected": "law_osh_act_art007",
+   "scope": "all"
+  },
+  {
+   "qid": "Q15",
+   "query": "哪些起重機算是危險性機械？",
+   "expected": "law_dme_rules_art003",
+   "scope": "all"
+  },
+  {
+   "qid": "Q16",
+   "query": "哪些鍋爐算是危險性設備？",
+   "expected": "law_dme_rules_art004",
+   "scope": "all"
+  },
+  {
+   "qid": "Q17",
+   "query": "固定式起重機的定期檢查要什麼時候提出申請？",
+   "expected": "law_dme_rules_art017",
+   "scope": "all"
+  },
+  {
+   "qid": "Q18",
+   "query": "固定式起重機定期檢查合格後，有效期限最長多久？",
+   "expected": "law_dme_rules_art018",
+   "scope": "all"
+  },
+  {
+   "qid": "Q19",
+   "query": "停用超過一年的固定式起重機想恢復使用，要怎麼辦？",
+   "expected": "law_dme_rules_art021",
+   "scope": "all"
+  },
+  {
+   "qid": "Q20",
+   "query": "移動式起重機要更換伸臂，需要申請什麼檢查？",
+   "expected": "law_dme_rules_art030",
+   "scope": "all"
+  }
+ ]
+}
